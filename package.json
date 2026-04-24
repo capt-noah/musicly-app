@@ -17,6 +17,7 @@
     "@react-navigation/elements": "^2.9.14",
     "@react-navigation/native": "^7.2.2",
     "buffer": "^6.0.3",
+    "dotenv": "^17.4.2",
     "expo": "~54.0.33",
     "expo-audio": "~1.1.1",
     "expo-blur": "~15.0.8",

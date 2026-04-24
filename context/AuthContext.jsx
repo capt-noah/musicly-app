@@ -1,27 +1,11 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { Platform } from 'react-native';
-import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { getApiUrl, getBackendBaseUrl } from '../shared/apiConfig';
 
 const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
-
-function normalizeApiUrl(rawUrl) {
-  const fallback = 'http://localhost:3000/api';
-  const trimmed = (rawUrl || fallback).trim().replace(/\/+$/, '');
-  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
-}
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const LOCAL_URL = 'http://localhost:3000'; 
-
-// Use local server for local testing (__DEV__ on simulator), 
-// but use Render for release builds or physical phone testing.
-const API_URL = normalizeApiUrl(
-  (__DEV__ && !Device.isDevice) ? LOCAL_URL : (BACKEND_URL || LOCAL_URL)
-);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -29,6 +13,8 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const API_URL = getApiUrl();
+  const BASE_URL = getBackendBaseUrl();
 
   useEffect(() => {
     loadSession();
@@ -151,7 +137,8 @@ export const AuthProvider = ({ children }) => {
       login, 
       register, 
       logout,
-      API_URL 
+      API_URL,
+      BASE_URL,
     }}>
       {children}
     </AuthContext.Provider>

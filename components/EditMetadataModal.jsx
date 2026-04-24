@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, Image, ActivityIndicator, Alert } from 'react-native';
 import { X, Camera, Save, Music, Mic2, Disc } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BACKEND_URL = 'http://localhost:3000'; // Update as needed
+import { useAuth } from '../context/AuthContext';
 
 export default function EditMetadataModal({ visible, onClose, song, onUpdate }) {
+  const { BASE_URL, sessionId } = useAuth();
   const [title, setTitle] = useState(song?.title || '');
   const [artist, setArtist] = useState(song?.artistName || '');
   const [album, setAlbum] = useState(song?.albumTitle || '');
@@ -30,14 +29,12 @@ export default function EditMetadataModal({ visible, onClose, song, onUpdate }) 
   const handleSave = async () => {
     setLoading(true);
     try {
-      const session = await AsyncStorage.getItem('musicly_session_id');
-      
       // 1. Update Text Metadata
-      const metaResponse = await fetch(`${BACKEND_URL}/songs/${song.id}/metadata`, {
+      const metaResponse = await fetch(`${BASE_URL}/songs/${song.id}/metadata`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session}` 
+          'Authorization': `Bearer ${sessionId}` 
         },
         body: JSON.stringify({ title, artistName: artist, albumTitle: album })
       });
@@ -46,11 +43,11 @@ export default function EditMetadataModal({ visible, onClose, song, onUpdate }) 
 
       // 2. Update Album Cover if changed
       if (newCover && song.albumId) {
-        const coverResponse = await fetch(`${BACKEND_URL}/songs/albums/${song.albumId}/cover`, {
+        const coverResponse = await fetch(`${BASE_URL}/songs/albums/${song.albumId}/cover`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session}` 
+            'Authorization': `Bearer ${sessionId}` 
           },
           body: JSON.stringify({ coverArt: `data:image/jpeg;base64,${newCover.base64}` })
         });

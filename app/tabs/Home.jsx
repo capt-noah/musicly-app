@@ -127,7 +127,7 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, BASE_URL } = useAuth();
   const { downloadedSongs, syncing, progress, syncMusic, resolveLocalPath } = useSync();
   const { playTrack } = usePlayer();
   const [topTracks, setTopTracks] = useState([]);
@@ -159,7 +159,7 @@ export default function Home() {
   useEffect(() => {
     const fetchTopTracks = async () => {
       try {
-        const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/songs/top_track`);
+        const response = await fetch(`${BASE_URL}/songs/top_track`);
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
           setFeatured({
@@ -175,7 +175,7 @@ export default function Home() {
       }
     };
     fetchTopTracks();
-  }, []);
+  }, [BASE_URL]);
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
