@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Settings as SettingsIcon, Send, ChevronRight, Bell, Speaker, Database, LogOut } from 'lucide-react-native';
+import { Settings as SettingsIcon, Send, ChevronRight, Bell, Speaker, Database, LogOut, Camera } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useSync } from '../../context/SyncContext';
 import ConnectTelegramModal from '../../components/ConnectTelegramModal';
@@ -20,19 +21,65 @@ const TOKENS = {
 };
 
 export default function Profile() {
-  const { user, logout } = useAuth();
-  const { syncing, syncMusic } = useSync();
+  const { user, logout, API_URL, sessionId, refreshUser } = useAuth();
+  const { syncing, syncMusic, localProfilePhoto, resolveLocalPath, syncProfilePhoto } = useSync();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
       await syncMusic();
+      await refreshUser(sessionId);
     } finally {
       setTimeout(() => setIsRefreshing(false), 450);
+    }
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Sorry, we need camera roll permissions to make this work!');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      setUploading(true);
+      const base64 = result.assets[0].base64;
+      try {
+        const response = await fetch(`${API_URL}/me/profile-photo`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionId}`
+          },
+          body: JSON.stringify({ base64: `data:image/jpeg;base64,${base64}` })
+        });
+        
+        if (response.ok) {
+          await refreshUser(sessionId);
+          // syncProfilePhoto will be triggered by useEffect in SyncContext 
+          // because user.profilePhoto will change in AuthContext
+        } else {
+          alert('Failed to upload image');
+        }
+      } catch (err) {
+        console.error('Upload error:', err);
+        alert('Network error during upload');
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -58,12 +105,21 @@ export default function Profile() {
       >
 
         <View className="items-center mb-12 pt-4">
-           <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-32 h-32 rounded-full overflow-hidden mb-6 shadow-2xl">
+           <TouchableOpacity 
+             onPress={pickImage} 
+             disabled={uploading}
+             style={{ backgroundColor: TOKENS.surfaceHigh }} 
+             className="w-32 h-32 rounded-full overflow-hidden mb-6 shadow-2xl relative"
+           >
               <Image 
-                source={{ uri: user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba` }} 
+                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`) }} 
                 className="w-full h-full" 
+                style={{ opacity: uploading ? 0.5 : 1 }}
               />
-           </View>
+              <View className="absolute inset-0 items-center justify-center bg-black/20">
+                <Camera size={24} color="#fff" opacity={0.8} />
+              </View>
+           </TouchableOpacity>
            <Text style={{ color: TOKENS.tertiary }} className="text-3xl font-black tracking-tight">{user?.firstName} {user?.lastName}</Text>
            <View style={{ backgroundColor: TOKENS.primary + '15' }} className="px-5 py-1.5 rounded-full mt-4">
               <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-[0.2em]">@{user?.username || 'curator'}</Text>

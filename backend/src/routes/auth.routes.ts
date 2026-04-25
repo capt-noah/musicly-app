@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { registerUser, loginUser } from '../services/auth.service';
+import { registerUser, loginUser, updateUserProfilePhoto } from '../services/auth.service';
 import { createSession, destroySession } from '../services/session.service';
 import { authenticateSession } from '../middleware/auth.middleware';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
@@ -92,6 +94,50 @@ router.post('/logout', authenticateSession as any, async (req: any, res) => {
 
 router.get('/me', authenticateSession as any, (req: any, res) => {
   res.json(req.user);
+});
+
+router.patch('/me/profile-photo', authenticateSession as any, async (req: any, res) => {
+  const { base64 } = req.body;
+  if (!base64) return res.status(400).json({ error: 'No image data provided' });
+
+  try {
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    // 1. Delete old local file if it exists to prevent server bloat
+    if (req.user.profilePhoto && req.user.profilePhoto.includes('/uploads/')) {
+      try {
+        const oldFileName = req.user.profilePhoto.split('/uploads/')[1];
+        const oldFilePath = path.join(uploadDir, oldFileName);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+          console.log('Cleaned up old profile photo:', oldFileName);
+        }
+      } catch (err) {
+        console.warn('Failed to delete old profile photo:', err);
+      }
+    }
+
+    const fileName = `avatar_${req.user.id}_${Date.now()}.jpg`;
+    const filePath = path.join(uploadDir, fileName);
+    
+    const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+    const photoUrl = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+    const updatedUser = await updateUserProfilePhoto(req.user.id, photoUrl);
+
+    res.json({ 
+      message: 'Profile photo updated', 
+      user: {
+        ...req.user,
+        profilePhoto: updatedUser.profilePhoto
+      }
+    });
+  } catch (error) {
+    console.error('Profile photo update failed:', error);
+    res.status(500).json({ error: 'Failed to save profile photo' });
+  }
 });
 
 export default router;

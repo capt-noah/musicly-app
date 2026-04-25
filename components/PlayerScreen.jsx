@@ -1,21 +1,20 @@
 import { Image } from "expo-image";
 import {
-    ChevronDown,
-    ChevronUp,
-    Heart,
-    Menu,
-    MoreHorizontal,
-    Pause,
-    Play,
-    Repeat,
-    Repeat1,
-    Shuffle,
-    SkipBack,
-    SkipForward,
-    X,
-    Music,
+ChevronDown,
+ChevronUp,
+Heart,
+Menu,
+MoreHorizontal,
+Pause,
+Play,
+Repeat,
+Shuffle,
+SkipBack,
+SkipForward,
+X,
+Music,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
     Animated,
     Dimensions,
@@ -33,7 +32,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import ImageColors from "react-native-image-colors";
 import MiniPlayer from "./MiniPlayer";
-import CurrentlyPlayingCard from "./CurrentlyPlayingCard";
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
 if (Platform.OS === "android") {
@@ -71,11 +69,13 @@ const TOKENS = {
   tertiary: '#fff8f2',
 };
 
-const LyricsSheet = ({ visible, onClose }) => {
+const LyricsSheet = React.memo(({ visible, onClose }) => {
+  const [isRendered, setIsRendered] = useState(visible);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
+      setIsRendered(true);
       Animated.spring(slideAnim, {
         toValue: SCREEN_HEIGHT * 0.2,
         useNativeDriver: true,
@@ -87,14 +87,18 @@ const LyricsSheet = ({ visible, onClose }) => {
         toValue: SCREEN_HEIGHT,
         duration: 280,
         useNativeDriver: true,
-      }).start();
+      }).start(() => {
+        setIsRendered(false);
+      });
     }
   }, [visible]);
 
-  if (!visible) return null;
+  if (!isRendered) return null;
 
   return (
     <Animated.View
+      renderToHardwareTextureAndroid
+      shouldRasterizeIOS
       style={{
         position: "absolute",
         left: 0,
@@ -105,6 +109,11 @@ const LyricsSheet = ({ visible, onClose }) => {
         borderTopLeftRadius: 40,
         borderTopRightRadius: 40,
         zIndex: 200,
+        elevation: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
       }}
     >
       {/* Handle */}
@@ -117,7 +126,7 @@ const LyricsSheet = ({ visible, onClose }) => {
         <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-lg font-black tracking-tight">
           Lyrics
         </Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
           <X size={22} color={TOKENS.onSurfaceVariant} strokeWidth={2} />
         </TouchableOpacity>
       </View>
@@ -127,6 +136,7 @@ const LyricsSheet = ({ visible, onClose }) => {
         className="flex-1 px-8 pt-4"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
+        removeClippedSubviews={true}
       >
         {LYRICS_LINES.map((line, i) => {
           const isActive = i === ACTIVE_LINE;
@@ -136,6 +146,7 @@ const LyricsSheet = ({ visible, onClose }) => {
               key={i}
               style={{
                 fontSize: isActive ? 24 : 20,
+                fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed',
                 fontWeight: isActive ? "900" : "700",
                 color: isActive ? TOKENS.primary : TOKENS.surfaceHigh,
                 lineHeight: isActive ? 34 : 28,
@@ -150,7 +161,7 @@ const LyricsSheet = ({ visible, onClose }) => {
       </ScrollView>
     </Animated.View>
   );
-};
+});
 
 import { useSync } from "../context/SyncContext";
 import { usePlayer } from "../context/PlayerContext";
@@ -295,19 +306,16 @@ const PlayerScreen = ({ onCollapse }) => {
   
   useEffect(() => {
     if (!isScrubbing.current) {
-      // If progress dropped (meaning the track changed, restarted, or sought backwards),
-      // we snap instantly. Otherwise, smooth forward flow.
       const isBackwardJump = progress < lastProgressRef.current - 1;
       
       Animated.timing(scrubAnim, {
         toValue: progress,
         duration: isBackwardJump ? 0 : 800,
         easing: Easing.linear,
-        useNativeDriver: false, // String percent interpolation cannot use native driver
+        useNativeDriver: true, // Now using native driver with translateX trick
       }).start();
     }
     
-    // Always update last progress trap
     lastProgressRef.current = progress;
   }, [progress]);
 
@@ -321,13 +329,14 @@ const PlayerScreen = ({ onCollapse }) => {
         scrubStartOffsetX.current = e.nativeEvent.locationX;
         const percent = Math.max(0, Math.min(100, (scrubStartOffsetX.current / Math.max(1, progressBarWidthRef.current)) * 100));
         scrubAnim.setValue(percent);
+        // Only update display state on start and end of scrub to save JS thread
         if (durationRef.current) setScrubPosition((percent / 100) * durationRef.current);
       },
       onPanResponderMove: (e, gestureState) => {
         const currentX = scrubStartOffsetX.current + gestureState.dx;
         const percent = Math.max(0, Math.min(100, (currentX / Math.max(1, progressBarWidthRef.current)) * 100));
         scrubAnim.setValue(percent);
-        if (durationRef.current) setScrubPosition((percent / 100) * durationRef.current);
+        // THROTTLED UI UPDATE: Not using setScrubPosition here to avoid killing performance
       },
       onPanResponderRelease: (e, gestureState) => {
         isScrubbing.current = false;
@@ -584,11 +593,12 @@ const PlayerScreen = ({ onCollapse }) => {
     const nextValue = queueMode ? 0 : 1;
     setQueueMode(!queueMode);
     
-    Animated.timing(queueAnim, {
+    // Smooth Native-compatible animation for mode switching
+    Animated.spring(queueAnim, {
       toValue: nextValue,
-      duration: 350,
-      easing: Easing.bezier(0.33, 1, 0.68, 1), // Smooth easeOutQuart
-      useNativeDriver: false, // width/margin cannot use native driver
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
     }).start();
   };
 
@@ -671,7 +681,11 @@ const PlayerScreen = ({ onCollapse }) => {
   return (
     <>
       {/* BASE BACKGROUND */}
-      <View style={{ position: "absolute", width: "100%", height: "100%", zIndex: 0 }}>
+      <View 
+        renderToHardwareTextureAndroid
+        shouldRasterizeIOS
+        style={{ position: "absolute", width: "100%", height: "100%", zIndex: 0 }}
+      >
         {/* Layer 1: Base Background */}
         <LinearGradient
           colors={currentColors}
@@ -747,8 +761,18 @@ const PlayerScreen = ({ onCollapse }) => {
                 <Text style={{ color: "#ffffff" }} className="text-[10px] font-bold uppercase tracking-widest opacity-80">{upcomingQueue.length} Tracks</Text>
               </View>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-              <Animated.View style={{ opacity: upNextAnim, transform: [{ translateY: upNextTranslateY }] }}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={{ paddingBottom: 40 }}
+              removeClippedSubviews={Platform.OS === 'android'}
+            >
+              <Animated.View style={{ 
+                opacity: upNextAnim, 
+                transform: [
+                  { translateY: upNextTranslateY },
+                  { translateY: queueShiftAnim }
+                ] 
+              }}>
                 {upcomingQueue.length === 0 ? (
                   <View className="items-center py-20 opacity-60">
                     <View style={{ backgroundColor: 'rgba(255,255,255,0.1)' }} className="w-16 h-16 rounded-full items-center justify-center mb-6">
@@ -877,9 +901,17 @@ const PlayerScreen = ({ onCollapse }) => {
                 onLayout={(e) => setTargetPlaceholderLayout(e.nativeEvent.layout)}
                 style={{
                   height: 56,
-                  width: placeholderWidth,
-                  marginRight: placeholderMargin,
-                  opacity: queueAnim
+                  width: 56,
+                  marginRight: 16,
+                  opacity: queueAnim,
+                  transform: [
+                    { scale: queueAnim },
+                    { translateX: queueAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-28, 0]
+                      }) 
+                    }
+                  ]
                 }}
               />
 
@@ -911,6 +943,7 @@ const PlayerScreen = ({ onCollapse }) => {
               >
                 {/* Visual rail - scaleY only so borderRadius:99 stays fully round at any height */}
                 <Animated.View
+                  renderToHardwareTextureAndroid
                   style={{
                     height: 5,
                     borderRadius: 99,
@@ -921,7 +954,7 @@ const PlayerScreen = ({ onCollapse }) => {
                 >
                   <Animated.View
                     style={{
-                      width: scrubAnim.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
+                      width: "100%",
                       height: "100%",
                       borderRadius: 99,
                       backgroundColor: TOKENS.onSurface,
@@ -929,6 +962,12 @@ const PlayerScreen = ({ onCollapse }) => {
                       shadowOffset: { width: 0, height: 0 },
                       shadowOpacity: 0.4,
                       shadowRadius: 6,
+                      transform: [{
+                        translateX: scrubAnim.interpolate({
+                          inputRange: [0, 100],
+                          outputRange: [-SCREEN_WIDTH, 0], // Native-driven progress bar
+                        })
+                      }]
                     }}
                   />
                 </Animated.View>

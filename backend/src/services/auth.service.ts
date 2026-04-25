@@ -34,9 +34,12 @@ export async function registerUser(
   return user;
 }
 
-export async function linkTelegramToUser(userId: string, telegramId: string) {
+export async function linkTelegramToUser(userId: string, telegramId: string, profilePhoto?: string | null) {
   const [user] = await db.update(users)
-    .set({ telegramId })
+    .set({ 
+      telegramId,
+      profilePhoto: profilePhoto || undefined
+    })
     .where(eq(users.id, userId))
     .returning();
   return user;
@@ -64,4 +67,12 @@ export async function loginUser(username: string, password: string) {
 export async function findUserById(userId: string) {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   return user || null;
+}
+
+export async function updateUserProfilePhoto(userId: string, photoUrl: string) {
+  const [user] = await db.update(users)
+    .set({ profilePhoto: photoUrl })
+    .where(eq(users.id, userId))
+    .returning();
+  return user;
 }

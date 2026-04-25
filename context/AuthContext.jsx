@@ -137,6 +137,7 @@ export const AuthProvider = ({ children }) => {
       login, 
       register, 
       logout,
+      refreshUser: validateSession,
       API_URL,
       BASE_URL,
     }}>

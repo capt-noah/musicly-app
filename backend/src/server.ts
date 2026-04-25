@@ -14,6 +14,8 @@ import interactionsRoutes from './routes/interactions.routes';
 
 const app = express();
 
+app.use('/uploads', express.static('uploads'));
+
 // Express Config
 app.use(express.json());
 app.use(cookieParser());

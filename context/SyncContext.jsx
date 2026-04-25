@@ -12,6 +12,7 @@ const SyncContext = createContext();
 const STORAGE_KEY = 'musicly_downloaded_songs';
 const MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
 const COVERS_DIR = `${FileSystem.documentDirectory}covers/`;
+const PROFILE_DIR = `${FileSystem.documentDirectory}profile/`;
 
 export function SyncProvider({ children }) {
   const { sessionId, user, API_URL } = useAuth();
@@ -22,6 +23,7 @@ export function SyncProvider({ children }) {
   const [syncQueue, setSyncQueue] = useState([]);
   const [fileProgresses, setFileProgresses] = useState({});
   const [likedSongs, setLikedSongs] = useState([]);
+  const [localProfilePhoto, setLocalProfilePhoto] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Get base URL (stripping /api if it exists for routes like /songs)
@@ -46,11 +48,17 @@ export function SyncProvider({ children }) {
       const coversInfo = await FileSystem.getInfoAsync(COVERS_DIR);
       if (!coversInfo.exists) await FileSystem.makeDirectoryAsync(COVERS_DIR, { recursive: true });
 
+      const profileInfo = await FileSystem.getInfoAsync(PROFILE_DIR);
+      if (!profileInfo.exists) await FileSystem.makeDirectoryAsync(PROFILE_DIR, { recursive: true });
+
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) setDownloadedSongs(JSON.parse(stored));
 
       const storedPlaylists = await AsyncStorage.getItem('musicly_playlists');
       if (storedPlaylists) setPlaylists(JSON.parse(storedPlaylists));
+
+      const storedProfilePhoto = await AsyncStorage.getItem('musicly_profile_photo');
+      if (storedProfilePhoto) setLocalProfilePhoto(storedProfilePhoto);
 
       if (sessionId) {
         await syncLikedSongs();
@@ -128,28 +136,34 @@ export function SyncProvider({ children }) {
     }
   };
 
-  const downloadFile = async (fileId, type = 'audio') => {
+  const downloadFile = async (fileIdOrUrl, type = 'audio') => {
     if (!sessionId) return null;
     try {
-      const endpoint = `${BASE_URL}/songs/file/${fileId}`;
-      const response = await fetch(endpoint, {
-        headers: { 'Authorization': `Bearer ${sessionId}` }
-      });
+      let url = null;
+      let targetFileId = fileIdOrUrl;
 
-      if (!response.ok) throw new Error(`Status ${response.status}`);
-      
-      const { url } = await response.json();
+      if (type === 'profile') {
+        url = fileIdOrUrl;
+        targetFileId = 'user_avatar';
+      } else {
+        const endpoint = `${BASE_URL}/songs/file/${fileIdOrUrl}`;
+        const response = await fetch(endpoint, {
+          headers: { 'Authorization': `Bearer ${sessionId}` }
+        });
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+        const data = await response.json();
+        url = data.url;
+      }
 
       const extension = type === 'audio' ? 'mp3' : 'jpg';
-      const folder = type === 'audio' ? MUSIC_DIR : COVERS_DIR;
-      const fileUri = `${folder}${fileId}.${extension}`;
+      const folder = type === 'audio' ? MUSIC_DIR : (type === 'profile' ? PROFILE_DIR : COVERS_DIR);
+      const fileUri = `${folder}${targetFileId}.${extension}`;
 
       const callback = downloadProgress => {
         if (!downloadProgress || !downloadProgress.totalBytesExpectedToWrite) return;
         const currentProgress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-        // only update for audio files to avoid UI thrashing since covers are small
         if (type === 'audio') {
-          updateFileProgress(fileId, Math.max(0, Math.min(1, currentProgress)));
+          updateFileProgress(targetFileId, Math.max(0, Math.min(1, currentProgress)));
         }
       };
 
@@ -163,14 +177,13 @@ export function SyncProvider({ children }) {
       const downloadRes = await downloadResumable.downloadAsync();
       
       if (type === 'audio') {
-        updateFileProgress(fileId, 1);
+        updateFileProgress(targetFileId, 1);
       }
 
-      // Return relative path (e.g., "music/file.mp3")
       const relPath = downloadRes.uri.split('/Documents/')[1];
       return relPath || downloadRes.uri;
     } catch (error) {
-      console.error(`Download failed for ${fileId}:`, error);
+      console.error(`Download failed for ${fileIdOrUrl}:`, error);
       return null;
     }
   };
@@ -232,6 +245,23 @@ export function SyncProvider({ children }) {
       await syncLikedSongs();
     }
   }, [sessionId, API_URL, likedSongs, downloadedSongs, syncLikedSongs]);
+
+  const syncProfilePhoto = useCallback(async () => {
+    if (!user?.profilePhoto) return;
+    
+    // If we already have a local photo and the URL hasn't changed (or we just want to avoid re-downloading)
+    // For now, let's check if it exists
+    const storedUrl = await AsyncStorage.getItem('musicly_profile_photo_url');
+    if (storedUrl === user.profilePhoto && localProfilePhoto) return;
+
+    console.log('Syncing profile photo from:', user.profilePhoto);
+    const localUri = await downloadFile(user.profilePhoto, 'profile');
+    if (localUri) {
+      setLocalProfilePhoto(localUri);
+      await AsyncStorage.setItem('musicly_profile_photo', localUri);
+      await AsyncStorage.setItem('musicly_profile_photo_url', user.profilePhoto);
+    }
+  }, [user?.profilePhoto, localProfilePhoto]);
 
   const syncMusic = useCallback(async () => {
     if (!sessionId || syncing) return;
@@ -329,8 +359,9 @@ export function SyncProvider({ children }) {
     if (sessionId && isInitialized) {
       syncMusic();
       syncLikedSongs();
+      syncProfilePhoto();
     }
-  }, [sessionId, isInitialized]);
+  }, [sessionId, isInitialized, user?.profilePhoto]);
 
   return (
     <SyncContext.Provider
@@ -347,7 +378,9 @@ export function SyncProvider({ children }) {
         syncMusic,
         syncPlaylists,
         syncLikedSongs,
+        syncProfilePhoto,
         toggleLike,
+        localProfilePhoto,
         API_URL
       }}
     >

@@ -13,7 +13,7 @@ import SyncSheet from '../../components/SyncSheet';
 
 const { width } = Dimensions.get('window');
 
-// Sonic Atelier Design Tokens
+// Design Tokens
 const TOKENS = {
   surface: '#0d0f0d',
   surfaceLow: '#111412',
@@ -29,11 +29,13 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const safeCards = cards && cards.length > 0 ? cards : [{ 
-    id: 1, label: 'No Albums', artist: 'Sync music first', tag: '#1', imageUrl: 'https://picsum.photos/seed/empty/600/600' 
+  const isEmpty = !cards || cards.length === 0;
+  const safeCards = !isEmpty ? cards : [{ 
+    id: 'empty', label: 'No albums found', artist: 'Sync your music to see them here', tag: '#0', imageUrl: null 
   }];
 
   const goTo = (newIdx) => {
+    if (safeCards.length <= 1) return;
     setActiveIdx(newIdx);
     scaleAnim.setValue(0.92);
     Animated.spring(scaleAnim, {
@@ -51,20 +53,28 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
   const getImage = (card) => {
     if (card.imageUrl) return card.imageUrl;
     if (card.tag === '#1' && featuredImageUrl) return featuredImageUrl;
-    return `https://api.dicebear.com/7.x/shapes/png?seed=${card.id || 'album'}&backgroundColor=111412`;
+    return null;
   };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, state) => Math.abs(state.dx) > 10,
+      onMoveShouldSetPanResponder: (_, state) => Math.abs(state.dx) > 15,
+      onPanResponderGrant: () => {
+        scaleAnim.setValue(0.98);
+      },
       onPanResponderRelease: (_, state) => {
-        if (state.dx > 50) {
+        if (state.dx > 40) {
           prev();
-        } else if (state.dx < -50) {
+        } else if (state.dx < -40) {
           next();
+        } else {
+          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
         }
       },
+      onPanResponderTerminate: () => {
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+      }
     })
   ).current;
 
@@ -89,46 +99,62 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
             overflow: 'hidden',
             backgroundColor: TOKENS.surfaceHigh,
             transform: [{ scale: scaleAnim }],
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.3,
+            shadowRadius: 20,
         }}>
           <TouchableOpacity 
              activeOpacity={0.95} 
              style={{ width: '100%', height: '100%' }}
+             disabled={isEmpty}
              onPress={() => router.push({ pathname: '/playlist', params: { albumId: active.id, title: active.label, artist: active.artist, cover: active.imageUrl }})}
           >
-            <Image source={{ uri: getImage(active) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={300} />
-            <LinearGradient colors={['transparent', 'rgba(13,15,13,0.85)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '70%' }} />
+            {getImage(active) ? (
+              <Image source={{ uri: getImage(active) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={300} />
+            ) : (
+              <View style={{ flex: 1, backgroundColor: TOKENS.surfaceHigh, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+                <Shuffle size={48} color={TOKENS.primary} style={{ opacity: 0.2, marginBottom: 16 }} />
+              </View>
+            )}
+            <LinearGradient colors={['transparent', 'rgba(13,15,13,0.95)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '80%' }} />
             
             <View style={{ position: 'absolute', top: 20, left: 24 }}>
-              <Text style={{ color: '#fff', fontSize: 32, fontWeight: '900', letterSpacing: -1.5 }}>
+              <Text style={{ color: TOKENS.primary, fontSize: 32, fontWeight: '900', letterSpacing: -1.5, opacity: 0.5 }}>
                 {active.tag}
               </Text>
             </View>
 
             <View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
               <View style={{ flex: 1, marginRight: 16 }}>
-                <Text style={{ color: TOKENS.onSurface, fontSize: 18, fontWeight: '900', letterSpacing: -0.5 }} numberOfLines={1}>{active.label}</Text>
-                <Text style={{ color: TOKENS.primary, fontSize: 10, fontWeight: '800', letterSpacing: 1 }} numberOfLines={1}>{active.artist}</Text>
+                <Text style={{ color: TOKENS.onSurface, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 }} numberOfLines={2}>{active.label}</Text>
+                <Text style={{ color: TOKENS.onSurfaceVariant, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginTop: 4 }} numberOfLines={1}>{active.artist}</Text>
               </View>
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: TOKENS.primary, alignItems: 'center', justifyContent: 'center' }}>
-                <Play size={20} color={TOKENS.surface} fill={TOKENS.surface} />
-              </View>
+              {!isEmpty && (
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: TOKENS.primary, alignItems: 'center', justifyContent: 'center' }}>
+                  <Play size={20} color={TOKENS.surface} fill={TOKENS.surface} />
+                </View>
+              )}
             </View>
           </TouchableOpacity>
         </Animated.View>
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 24 }}>
-        {safeCards.map((_, i) => (
-          <View key={i} style={{ width: i === activeIdx ? 16 : 4, height: 4, borderRadius: 2, backgroundColor: i === activeIdx ? TOKENS.primary : TOKENS.onSurfaceVariant, opacity: i === activeIdx ? 1 : 0.2 }} />
-        ))}
-      </View>
+      {!isEmpty && safeCards.length > 1 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 24 }}>
+          {safeCards.map((_, i) => (
+            <View key={i} style={{ width: i === activeIdx ? 16 : 4, height: 4, borderRadius: 2, backgroundColor: i === activeIdx ? TOKENS.primary : TOKENS.onSurfaceVariant, opacity: i === activeIdx ? 1 : 0.2 }} />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 export default function Home() {
   const { user, BASE_URL } = useAuth();
-  const { downloadedSongs, syncing, progress, syncMusic, resolveLocalPath } = useSync();
+  const { downloadedSongs, syncing, progress, syncMusic, resolveLocalPath, localProfilePhoto } = useSync();
   const { playTrack } = usePlayer();
   const [topTracks, setTopTracks] = useState([]);
   const [featured, setFeatured] = useState(FEATURED_PLAYLIST);
@@ -205,7 +231,11 @@ export default function Home() {
               <RefreshCw size={18} color={TOKENS.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-10 h-10 rounded-full overflow-hidden">
-              <Image source={{ uri: 'https://picsum.photos/seed/user/400/400' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+              <Image 
+                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : 'https://picsum.photos/seed/user/400/400' }} 
+                style={{ width: '100%', height: '100%' }} 
+                contentFit="cover" 
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -219,16 +249,16 @@ export default function Home() {
         <ShuffleCarousel 
           cards={dynamicAlbums.length > 5 ? dynamicAlbums.slice(0, 5) : dynamicAlbums} 
           featuredImageUrl={featured.imageUrl} 
-          userName={user?.firstName}
+          userName={user?.username || user?.firstName}
         />
 
         {/* Recently Synced Section */}
-        {syncedList.length > 0 && (
-          <View className="mb-12">
-            <View className="flex-row justify-between items-baseline mb-8">
-              <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Recently synced</Text>
-              <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold tracking-widest">LIBRARY</Text>
-            </View>
+        <View className="mb-12">
+          <View className="flex-row justify-between items-baseline mb-8">
+            <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Recently synced</Text>
+            <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold tracking-widest">LIBRARY</Text>
+          </View>
+          {syncedList.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
               {syncedList.map((song) => (
                 <TouchableOpacity key={song.id} className="mr-8 w-44" onPress={() => playTrack(song, syncedList)}>
@@ -244,32 +274,41 @@ export default function Home() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <View style={{ backgroundColor: TOKENS.surfaceLow }} className="rounded-3xl p-8 items-center justify-center">
+              <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-sm font-bold opacity-50">No recently synced songs</Text>
+            </View>
+          )}
+        </View>
 
         {/* Top Tracks Section */}
         <View className="mb-12">
           <View className="flex-row justify-between items-baseline mb-8">
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Top choice</Text>
-            <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold tracking-widest">ATELIER</Text>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-            {topTracks.map((track) => (
-              <TouchableOpacity key={track.id} className="mr-8 w-44">
-                <View style={{ backgroundColor: TOKENS.surfaceLow }} className="aspect-square rounded-3xl overflow-hidden mb-4">
-                  <Image source={{ uri: track.cover || 'https://via.placeholder.com/600' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                </View>
-                <Text style={{ color: TOKENS.onSurface }} className="font-bold text-base tracking-tight mb-0.5" numberOfLines={1}>{track.title}</Text>
-                <Text
-                  className="text-[11px] font-bold mt-0.5 tracking-widest text-[#a6ada6] opacity-60"
-                  numberOfLines={1}
-                >
-                  {track.artistName || "Unknown Artist"}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {topTracks.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+              {topTracks.map((track) => (
+                <TouchableOpacity key={track.id} className="mr-8 w-44">
+                  <View style={{ backgroundColor: TOKENS.surfaceLow }} className="aspect-square rounded-3xl overflow-hidden mb-4">
+                    <Image source={{ uri: track.cover || 'https://via.placeholder.com/600' }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  </View>
+                  <Text style={{ color: TOKENS.onSurface }} className="font-bold text-base tracking-tight mb-0.5" numberOfLines={1}>{track.title}</Text>
+                  <Text
+                    className="text-[11px] font-bold mt-0.5 tracking-widest text-[#a6ada6] opacity-60"
+                    numberOfLines={1}
+                  >
+                    {track.artistName || "Unknown Artist"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={{ backgroundColor: TOKENS.surfaceLow }} className="rounded-3xl p-8 items-center justify-center">
+              <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-sm font-bold opacity-50">No top tracks found</Text>
+            </View>
+          )}
         </View>
 
         {/* Trending Section */}
