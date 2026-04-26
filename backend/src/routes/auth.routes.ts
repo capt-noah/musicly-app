@@ -124,7 +124,7 @@ router.patch('/me/profile-photo', authenticateSession as any, async (req: any, r
     const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
     fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
-    const photoUrl = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+    const photoUrl = `/uploads/${fileName}`;
     const updatedUser = await updateUserProfilePhoto(req.user.id, photoUrl);
 
     res.json({ 

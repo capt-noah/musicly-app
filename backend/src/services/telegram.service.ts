@@ -26,13 +26,15 @@ export function initTelegramBot() {
             const photos = await bot.getUserProfilePhotos(msg.from!.id);
             if (photos.total_count > 0) {
               const fileId = photos.photos[0][photos.photos[0].length - 1].file_id;
-              profilePhotoUrl = await bot.getFileLink(fileId);
+              // Instead of a direct link (which leaks the bot token), we use our internal media proxy
+              profilePhotoUrl = `/media/${fileId}`;
             }
           } catch (photoErr) {
             console.warn('Failed to fetch profile photos:', photoErr);
           }
 
           await linkTelegramToUser(userId, msg.from!.id.toString(), profilePhotoUrl);
+          console.log(`[TelegramBot] Linked user ${userId} to Telegram ${msg.from!.id}. Photo: ${profilePhotoUrl}`);
           bot.sendMessage(chatId, "✅ Your Musicly account has been successfully linked! You can now send audio files here to add them to your library.");
         } catch (error) {
           bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new token in the app.");

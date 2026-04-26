@@ -21,7 +21,7 @@ const TOKENS = {
 };
 
 export default function Profile() {
-  const { user, logout, API_URL, sessionId, refreshUser } = useAuth();
+  const { user, logout, API_URL, BASE_URL, sessionId, refreshUser } = useAuth();
   const { syncing, syncMusic, localProfilePhoto, resolveLocalPath, syncProfilePhoto } = useSync();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
@@ -47,7 +47,7 @@ export default function Profile() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
@@ -105,21 +105,27 @@ export default function Profile() {
       >
 
         <View className="items-center mb-12 pt-4">
-           <TouchableOpacity 
-             onPress={pickImage} 
-             disabled={uploading}
-             style={{ backgroundColor: TOKENS.surfaceHigh }} 
-             className="w-32 h-32 rounded-full overflow-hidden mb-6 shadow-2xl relative"
-           >
-              <Image 
-                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`) }} 
-                className="w-full h-full" 
-                style={{ opacity: uploading ? 0.5 : 1 }}
-              />
-              <View className="absolute inset-0 items-center justify-center bg-black/20">
-                <Camera size={24} color="#fff" opacity={0.8} />
-              </View>
-           </TouchableOpacity>
+           <View className="relative mb-6">
+              <TouchableOpacity 
+                onPress={pickImage} 
+                disabled={uploading}
+                style={{ backgroundColor: TOKENS.surfaceHigh }} 
+                className="w-32 h-32 rounded-full overflow-hidden shadow-2xl"
+              >
+                 <Image 
+                   source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
+                   style={{ width: '100%', height: '100%', opacity: uploading ? 0.5 : 1 }}
+                   contentFit="cover"
+                 />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={pickImage}
+                activeOpacity={0.8}
+                style={{ backgroundColor: TOKENS.primary, position: 'absolute', bottom: 2, right: 2, width: 34, height: 34, borderRadius: 17, borderWidth: 4, borderColor: TOKENS.surface, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }}
+              >
+                <Camera size={14} color={TOKENS.surface} strokeWidth={3} />
+              </TouchableOpacity>
+           </View>
            <Text style={{ color: TOKENS.tertiary }} className="text-3xl font-black tracking-tight">{user?.firstName} {user?.lastName}</Text>
            <View style={{ backgroundColor: TOKENS.primary + '15' }} className="px-5 py-1.5 rounded-full mt-4">
               <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-[0.2em]">@{user?.username || 'curator'}</Text>

@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSync } from '../context/SyncContext';
 import { usePlayer } from '../context/PlayerContext';
+import { useAuth } from '../context/AuthContext';
 import MiniPlayer from './MiniPlayer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -25,7 +26,8 @@ const TOKENS = {
 };
 
 export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying, router }) {
-  const { resolveLocalPath } = useSync();
+  const { user, BASE_URL } = useAuth();
+  const { resolveLocalPath, localProfilePhoto } = useSync();
   const { repeatMode, toggleRepeatMode, addToQueue, shuffleMode, toggleShuffleMode, expandPlayer } = usePlayer();
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -80,11 +82,22 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
           >
             <ChevronLeft size={22} color={TOKENS.onSurface} strokeWidth={2} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={{ backgroundColor: 'rgba(0,0,0,0.4)', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <MoreHorizontal size={22} color={TOKENS.onSurface} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity 
+              style={{ backgroundColor: 'rgba(0,0,0,0.4)', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+            >
+              <Image 
+                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
+                style={{ width: '100%', height: '100%' }} 
+                contentFit="cover"
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={{ backgroundColor: 'rgba(0,0,0,0.4)', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <MoreHorizontal size={22} color={TOKENS.onSurface} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Animated.ScrollView 

@@ -7,6 +7,7 @@ import SonicSheet from './SonicSheet';
 export default function ConnectTelegramModal({ visible, onClose }) {
   const { API_URL } = useAuth();
   const [token, setToken] = useState(null);
+  const [botUsername, setBotUsername] = useState('my_musicly_bot');
   const [loading, setLoading] = useState(true);
   const [isLinked, setIsLinked] = useState(false);
   const [error, setError] = useState(null);
@@ -44,6 +45,7 @@ export default function ConnectTelegramModal({ visible, onClose }) {
       const data = await response.json();
       if (data.token) {
         setToken(data.token);
+        if (data.botUsername) setBotUsername(data.botUsername);
       }
     } catch (e) {}
   };
@@ -68,7 +70,7 @@ export default function ConnectTelegramModal({ visible, onClose }) {
 
   const handleOpenTelegram = () => {
     if (token) {
-      const url = `https://t.me/my_musicly_bot?start=${token}`;
+      const url = `https://t.me/${botUsername}?start=${token}`;
       Linking.openURL(url);
     }
   };
@@ -97,7 +99,7 @@ export default function ConnectTelegramModal({ visible, onClose }) {
             </View>
             <Text style={{ color: '#b9cbba' }} className="text-3xl font-black mb-3 text-center">Linked Successfully</Text>
             <Text style={{ color: '#a6ada6' }} className="text-center mb-12 leading-6 px-4 font-medium">
-              Your account is verified. You can now send audio files directly to @my_musicly_bot.
+              Your account is verified. You can now send audio files directly to @{botUsername}.
             </Text>
             <TouchableOpacity 
               onPress={onClose}

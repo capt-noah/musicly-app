@@ -26,131 +26,165 @@ const TOKENS = {
 
 const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
   const router = useRouter();
-  const [activeIdx, setActiveIdx] = useState(0);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   const isEmpty = !cards || cards.length === 0;
   const safeCards = !isEmpty ? cards : [{ 
     id: 'empty', label: 'No albums found', artist: 'Sync your music to see them here', tag: '#0', imageUrl: null 
   }];
 
-  const goTo = (newIdx) => {
-    if (safeCards.length <= 1) return;
-    setActiveIdx(newIdx);
-    scaleAnim.setValue(0.92);
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 6,
-      tension: 100,
-    }).start();
-  };
+  const CARD_W = width * 0.82;
+  const SPACING = 16;
+  const FULL_CARD_W = CARD_W + SPACING;
 
-  const prev = () => goTo((activeIdx - 1 + safeCards.length) % safeCards.length);
-  const next = () => goTo((activeIdx + 1) % safeCards.length);
-
-  const active = safeCards[activeIdx];
   const getImage = (card) => {
     if (card.imageUrl) return card.imageUrl;
     if (card.tag === '#1' && featuredImageUrl) return featuredImageUrl;
     return null;
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, state) => Math.abs(state.dx) > 15,
-      onPanResponderGrant: () => {
-        scaleAnim.setValue(0.98);
-      },
-      onPanResponderRelease: (_, state) => {
-        if (state.dx > 40) {
-          prev();
-        } else if (state.dx < -40) {
-          next();
-        } else {
-          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
-      }
-    })
-  ).current;
-
-  const CARD_H = 220;
-  const CARD_W = width - 48;
-
   return (
     <View style={{ marginBottom: 48 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingHorizontal: 32 }}>
         <Text style={{ color: TOKENS.onSurfaceVariant, fontSize: 10, fontWeight: '900', letterSpacing: 2.5 }}>
           {userName ? `${userName}'s Choice` : "Curator's Choice"}
         </Text>
       </View>
 
-      <View style={{ height: CARD_H, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View 
-          {...panResponder.panHandlers}
-          style={{
-            width: CARD_W,
-            height: CARD_H, 
-            borderRadius: 40,
-            overflow: 'hidden',
-            backgroundColor: TOKENS.surfaceHigh,
-            transform: [{ scale: scaleAnim }],
-            elevation: 5,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.3,
-            shadowRadius: 20,
-        }}>
-          <TouchableOpacity 
-             activeOpacity={0.95} 
-             style={{ width: '100%', height: '100%' }}
-             disabled={isEmpty}
-             onPress={() => router.push({ pathname: '/playlist', params: { albumId: active.id, title: active.label, artist: active.artist, cover: active.imageUrl }})}
-          >
-            {getImage(active) ? (
-              <Image source={{ uri: getImage(active) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={300} />
-            ) : (
-              <View style={{ flex: 1, backgroundColor: TOKENS.surfaceHigh, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-                <Shuffle size={48} color={TOKENS.primary} style={{ opacity: 0.2, marginBottom: 16 }} />
-              </View>
-            )}
-            <LinearGradient colors={['transparent', 'rgba(13,15,13,0.95)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '80%' }} />
-            
-            <View style={{ position: 'absolute', top: 20, left: 24 }}>
-              <Text style={{ color: TOKENS.primary, fontSize: 32, fontWeight: '900', letterSpacing: -1.5, opacity: 0.5 }}>
-                {active.tag}
-              </Text>
-            </View>
+      <Animated.ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={FULL_CARD_W}
+        disableIntervalMomentum={true}
+        decelerationRate="fast"
+        contentContainerStyle={{ 
+          paddingHorizontal: (width - CARD_W) / 2,
+        }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        {safeCards.map((card, index) => {
+          const inputRange = [
+            (index - 1) * FULL_CARD_W,
+            index * FULL_CARD_W,
+            (index + 1) * FULL_CARD_W,
+          ];
 
-            <View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <Text style={{ color: TOKENS.onSurface, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 }} numberOfLines={2}>{active.label}</Text>
-                <Text style={{ color: TOKENS.onSurfaceVariant, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginTop: 4 }} numberOfLines={1}>{active.artist}</Text>
-              </View>
-              {!isEmpty && (
-                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: TOKENS.primary, alignItems: 'center', justifyContent: 'center' }}>
-                  <Play size={20} color={TOKENS.surface} fill={TOKENS.surface} />
+          const scale = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.92, 1, 0.92],
+            extrapolate: 'clamp',
+          });
+
+          const opacity = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.6, 1, 0.6],
+            extrapolate: 'clamp',
+          });
+
+          return (
+            <Animated.View
+              key={card.id || index}
+              style={{
+                width: CARD_W,
+                height: 220,
+                marginRight: SPACING,
+                borderRadius: 40,
+                overflow: 'hidden',
+                backgroundColor: TOKENS.surfaceHigh,
+                transform: [{ scale }],
+                opacity,
+                elevation: 5,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.3,
+                shadowRadius: 20,
+              }}
+            >
+              <TouchableOpacity 
+                activeOpacity={0.95} 
+                style={{ width: '100%', height: '100%' }}
+                disabled={isEmpty}
+                onPress={() => router.push({ pathname: '/playlist', params: { albumId: card.id, title: card.label, artist: card.artist, cover: card.imageUrl }})}
+              >
+                {getImage(card) ? (
+                  <Image source={{ uri: getImage(card) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={300} />
+                ) : (
+                  <View style={{ flex: 1, backgroundColor: TOKENS.surfaceHigh, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+                    <Shuffle size={48} color={TOKENS.primary} style={{ opacity: 0.2, marginBottom: 16 }} />
+                  </View>
+                )}
+                
+                <LinearGradient colors={['transparent', 'rgba(13,15,13,0.95)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '80%' }} />
+                
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+
+                <View style={{ position: 'absolute', top: 24, left: 24, zIndex: 10 }}>
+                  <Text style={{ color: '#ffffff', fontSize: 42, fontWeight: '900', letterSpacing: -2 }}>
+                    {card.tag}
+                  </Text>
                 </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
 
+                <View style={{ position: 'absolute', bottom: 24, left: 24, right: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <View style={{ flex: 1, marginRight: 16 }}>
+                    <Text style={{ color: TOKENS.onSurface, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 }} numberOfLines={2}>{card.label}</Text>
+                    <Text style={{ color: TOKENS.onSurfaceVariant, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginTop: 4 }} numberOfLines={1}>{card.artist}</Text>
+                  </View>
+                  {!isEmpty && (
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: TOKENS.primary, alignItems: 'center', justifyContent: 'center' }}>
+                      <Play size={20} color={TOKENS.surface} fill={TOKENS.surface} />
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        })}
+      </Animated.ScrollView>
+
+      {/* Pagination Indicator */}
       {!isEmpty && safeCards.length > 1 && (
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 24 }}>
-          {safeCards.map((_, i) => (
-            <View key={i} style={{ width: i === activeIdx ? 16 : 4, height: 4, borderRadius: 2, backgroundColor: i === activeIdx ? TOKENS.primary : TOKENS.onSurfaceVariant, opacity: i === activeIdx ? 1 : 0.2 }} />
-          ))}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 }}>
+          {safeCards.map((_, i) => {
+            const inputRange = [
+              (i - 1) * FULL_CARD_W,
+              i * FULL_CARD_W,
+              (i + 1) * FULL_CARD_W,
+            ];
+
+            const dotWidth = scrollX.interpolate({
+              inputRange,
+              outputRange: [6, 20, 6],
+              extrapolate: 'clamp',
+            });
+
+            const opacity = scrollX.interpolate({
+              inputRange,
+              outputRange: [0.2, 1, 0.2],
+              extrapolate: 'clamp',
+            });
+
+            return (
+              <Animated.View
+                key={i}
+                style={{
+                  width: dotWidth,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: TOKENS.primary,
+                  opacity,
+                }}
+              />
+            );
+          })}
         </View>
       )}
     </View>
   );
-}
+};
 
 export default function Home() {
   const { user, BASE_URL } = useAuth();
@@ -174,12 +208,14 @@ export default function Home() {
           id: key,
           label: song.albumTitle || song.title,
           artist: song.artistName || 'Unknown Artist',
-          tag: song.albumId ? 'Collection' : 'Single',
           imageUrl: resolveLocalPath(song.localCoverUri)
         };
       }
     });
-    return Object.values(albumMap);
+    return Object.values(albumMap).map((album, index) => ({
+      ...album,
+      tag: `#${index + 1}`
+    }));
   }, [downloadedSongs, resolveLocalPath]);
 
   useEffect(() => {
@@ -232,7 +268,7 @@ export default function Home() {
             </TouchableOpacity>
             <TouchableOpacity style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-10 h-10 rounded-full overflow-hidden">
               <Image 
-                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : 'https://picsum.photos/seed/user/400/400' }} 
+                source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
                 style={{ width: '100%', height: '100%' }} 
                 contentFit="cover" 
               />
@@ -242,8 +278,9 @@ export default function Home() {
       </View>
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 180 }}
-        className="flex-1 px-8"
+        className="flex-1"
         refreshControl={<RefreshControl refreshing={isRefreshing || syncing} onRefresh={handleRefresh} tintColor={TOKENS.primary} />}
       >
         <ShuffleCarousel 
@@ -253,7 +290,7 @@ export default function Home() {
         />
 
         {/* Recently Synced Section */}
-        <View className="mb-12">
+        <View className="mb-12 px-8">
           <View className="flex-row justify-between items-baseline mb-8">
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Recently synced</Text>
             <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold tracking-widest">LIBRARY</Text>
@@ -282,7 +319,7 @@ export default function Home() {
         </View>
 
         {/* Top Tracks Section */}
-        <View className="mb-12">
+        <View className="mb-12 px-8">
           <View className="flex-row justify-between items-baseline mb-8">
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Top choice</Text>
           </View>

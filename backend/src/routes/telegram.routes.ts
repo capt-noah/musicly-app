@@ -5,15 +5,18 @@ import { users } from '../schema';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
 
+import { bot } from '../config';
+
 const router = Router();
 
 /**
  * Generates a linking token for the current user.
  */
-router.post('/link-token', authenticateSession as any, (req: any, res) => {
+router.post('/link-token', authenticateSession as any, async (req: any, res) => {
   try {
     const token = generateLinkToken(req.user.id);
-    res.json({ token, botUsername: 'my_musicly_bot' });
+    const botInfo = await bot.getMe();
+    res.json({ token, botUsername: botInfo.username });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate token' });
   }

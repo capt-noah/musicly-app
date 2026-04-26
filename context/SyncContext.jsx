@@ -143,7 +143,7 @@ export function SyncProvider({ children }) {
       let targetFileId = fileIdOrUrl;
 
       if (type === 'profile') {
-        url = fileIdOrUrl;
+        url = fileIdOrUrl.startsWith('/') ? `${BASE_URL}${fileIdOrUrl}` : fileIdOrUrl;
         targetFileId = 'user_avatar';
       } else {
         const endpoint = `${BASE_URL}/songs/file/${fileIdOrUrl}`;
@@ -247,21 +247,47 @@ export function SyncProvider({ children }) {
   }, [sessionId, API_URL, likedSongs, downloadedSongs, syncLikedSongs]);
 
   const syncProfilePhoto = useCallback(async () => {
-    if (!user?.profilePhoto) return;
-    
-    // If we already have a local photo and the URL hasn't changed (or we just want to avoid re-downloading)
-    // For now, let's check if it exists
-    const storedUrl = await AsyncStorage.getItem('musicly_profile_photo_url');
-    if (storedUrl === user.profilePhoto && localProfilePhoto) return;
-
-    console.log('Syncing profile photo from:', user.profilePhoto);
-    const localUri = await downloadFile(user.profilePhoto, 'profile');
-    if (localUri) {
-      setLocalProfilePhoto(localUri);
-      await AsyncStorage.setItem('musicly_profile_photo', localUri);
-      await AsyncStorage.setItem('musicly_profile_photo_url', user.profilePhoto);
+    if (!user?.profilePhoto) {
+      console.log('[Sync] No profile photo URL found for user');
+      return;
     }
-  }, [user?.profilePhoto, localProfilePhoto]);
+    
+    const storedUrl = await AsyncStorage.getItem('musicly_profile_photo_url');
+    
+    // Check if local file exists and is actually an image (not a small error JSON)
+    let isFileValid = false;
+    if (localProfilePhoto) {
+      try {
+        const info = await FileSystem.getInfoAsync(resolveLocalPath(localProfilePhoto));
+        // Error JSONs are usually < 200 bytes, real photos are much larger
+        if (info.exists && info.size > 500) {
+          isFileValid = true;
+        }
+      } catch (e) {
+        isFileValid = false;
+      }
+    }
+
+    if (storedUrl === user.profilePhoto && isFileValid) {
+      console.log('[Sync] Profile photo already up to date and valid');
+      return;
+    }
+
+    console.log('[Sync] Starting profile photo sync (cache invalid or missing) from:', user.profilePhoto);
+    try {
+      const localUri = await downloadFile(user.profilePhoto, 'profile');
+      if (localUri) {
+        setLocalProfilePhoto(localUri);
+        await AsyncStorage.setItem('musicly_profile_photo', localUri);
+        await AsyncStorage.setItem('musicly_profile_photo_url', user.profilePhoto);
+        console.log('[Sync] Profile photo synced and saved locally:', localUri);
+      } else {
+        console.warn('[Sync] Profile photo download returned null');
+      }
+    } catch (err) {
+      console.error('[Sync] Profile photo sync failed:', err);
+    }
+  }, [user?.profilePhoto, localProfilePhoto, downloadFile]);
 
   const syncMusic = useCallback(async () => {
     if (!sessionId || syncing) return;

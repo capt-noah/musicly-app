@@ -23,8 +23,8 @@ const TOKENS = {
 export default function PlaylistDetail() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { user, sessionId, API_URL } = useAuth();
-  const { downloadedSongs, resolveLocalPath } = useSync();
+  const { user, sessionId, API_URL, BASE_URL } = useAuth();
+  const { downloadedSongs, resolveLocalPath, localProfilePhoto } = useSync();
   const { playTrack, currentTrack, isPlaying, toggleShuffleMode, shuffleMode } = usePlayer();
   
   const [playlistInfo, setPlaylistInfo] = useState(null);
@@ -131,11 +131,11 @@ export default function PlaylistDetail() {
             
             <View className="flex-row items-center px-3 py-1.5 rounded-full" style={{ backgroundColor: TOKENS.surfaceHigh }}>
               <View style={{ backgroundColor: TOKENS.surfaceHighest }} className="w-6 h-6 rounded-full overflow-hidden mr-2 items-center justify-center border border-white/5">
-                {user?.profilePhoto ? (
-                  <Image source={{ uri: user.profilePhoto }} style={{ width: '100%', height: '100%' }} />
-                ) : (
-                  <Text style={{ color: TOKENS.primary }} className="font-black text-[8px]">{user?.firstName?.charAt(0) || 'C'}</Text>
-                )}
+                <Image 
+                  source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
+                  style={{ width: '100%', height: '100%' }} 
+                  contentFit="cover"
+                />
               </View>
               <Text style={{ color: TOKENS.primary }} className="text-[9px] font-black uppercase tracking-widest opacity-80">
                 {playlistSongs.length} Tracks
