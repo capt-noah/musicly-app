@@ -50,8 +50,8 @@ async function startWorkerLoop() {
             const artistName = audioData.performer || 'Unknown Artist';
             artistId = await findOrCreateArtist(artistName);
             
-            // If no album metadata, group under 'Single' to avoid creating unique albums for every track
-            const albumName = audioData.album || 'Single';
+            // If no album metadata, group under 'Standalone Tracks' to avoid creating unique albums for every track
+            const albumName = audioData.album || 'Standalone Tracks';
             albumId = await findOrCreateAlbum(albumName, artistId, item.coverId || undefined);
           }
           // -------------------------------

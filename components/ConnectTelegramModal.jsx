@@ -82,15 +82,15 @@ export default function ConnectTelegramModal({ visible, onClose }) {
       title="Telegram Bot"
       heightPercent={0.65}
     >
-      <View className="px-10 mt-10 flex-1">
-        <Text style={{ color: '#b9cbba', fontSize: 10, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 30 }}>
+      <View className="px-10 mt-6 flex-1">
+        <Text style={{ color: '#b9cbba', fontSize: 10, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 20, marginTop: 10 }}>
           Status: {loading ? 'Checking...' : isLinked ? 'Connected' : 'Disconnected'}
         </Text>
 
         {loading ? (
-          <View className="flex-1 items-center mt-10">
+          <View className="flex-1 items-center gap-4 mt-4">
             <ActivityIndicator color="#b9cbba" size="large" />
-            <Text style={{ color: '#a6ada6' }} className="text-[10px] uppercase font-black tracking-[0.3rem] mt-6">Securing Session...</Text>
+            <Text style={{ color: '#a6ada6' }} className="text-[10px] uppercase font-black tracking-[0.3rem] mt-4">Securing Session...</Text>
           </View>
         ) : isLinked ? (
           <View className="items-center pt-6">

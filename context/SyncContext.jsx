@@ -143,6 +143,20 @@ export function SyncProvider({ children }) {
       let targetFileId = fileIdOrUrl;
 
       if (type === 'profile') {
+        if (fileIdOrUrl.startsWith('data:image')) {
+          // If the profile photo is already a base64 string (stored in DB to save server disk)
+          // we save it directly to the local profile folder.
+          const folder = PROFILE_DIR;
+          const fileUri = `${folder}user_avatar.jpg`;
+          const base64Data = fileIdOrUrl.replace(/^data:image\/\w+;base64,/, '');
+          
+          await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          
+          const relPath = fileUri.split('/Documents/')[1];
+          return relPath || fileUri;
+        }
         url = fileIdOrUrl.startsWith('/') ? `${BASE_URL}${fileIdOrUrl}` : fileIdOrUrl;
         targetFileId = 'user_avatar';
       } else {
@@ -153,6 +167,20 @@ export function SyncProvider({ children }) {
         if (!response.ok) throw new Error(`Status ${response.status}`);
         const data = await response.json();
         url = data.url;
+      }
+
+      // Pre-flight check for image/profile types to ensure we don't download HTML 404 pages
+      if (type === 'profile' || type === 'cover') {
+        try {
+          const check = await fetch(url, { method: 'HEAD' });
+          const contentType = check.headers.get('content-type');
+          if (!check.ok || (contentType && contentType.includes('text/html'))) {
+            console.warn(`[Download] Skipping ${type} download: URL returned ${check.status} or HTML content.`);
+            return null;
+          }
+        } catch (e) {
+          console.warn(`[Download] Pre-flight check failed for ${url}:`, e);
+        }
       }
 
       const extension = type === 'audio' ? 'mp3' : 'jpg';
@@ -176,6 +204,14 @@ export function SyncProvider({ children }) {
 
       const downloadRes = await downloadResumable.downloadAsync();
       
+      if (!downloadRes || downloadRes.status < 200 || downloadRes.status >= 300) {
+        // If FileSystem download failed or returned error status, clean up
+        if (await FileSystem.getInfoAsync(fileUri).then(i => i.exists)) {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        }
+        return null;
+      }
+
       if (type === 'audio') {
         updateFileProgress(targetFileId, 1);
       }
@@ -248,18 +284,16 @@ export function SyncProvider({ children }) {
 
   const syncProfilePhoto = useCallback(async () => {
     if (!user?.profilePhoto) {
-      console.log('[Sync] No profile photo URL found for user');
       return;
     }
     
     const storedUrl = await AsyncStorage.getItem('musicly_profile_photo_url');
     
-    // Check if local file exists and is actually an image (not a small error JSON)
+    // Check if local file exists and is actually a valid image
     let isFileValid = false;
     if (localProfilePhoto) {
       try {
         const info = await FileSystem.getInfoAsync(resolveLocalPath(localProfilePhoto));
-        // Error JSONs are usually < 200 bytes, real photos are much larger
         if (info.exists && info.size > 500) {
           isFileValid = true;
         }
@@ -268,26 +302,70 @@ export function SyncProvider({ children }) {
       }
     }
 
+    // If URL is the same and file is valid, skip
     if (storedUrl === user.profilePhoto && isFileValid) {
-      console.log('[Sync] Profile photo already up to date and valid');
       return;
     }
 
-    console.log('[Sync] Starting profile photo sync (cache invalid or missing) from:', user.profilePhoto);
+    console.log('[Sync] Profile photo changed on server or missing locally. Refreshing...');
     try {
       const localUri = await downloadFile(user.profilePhoto, 'profile');
       if (localUri) {
         setLocalProfilePhoto(localUri);
         await AsyncStorage.setItem('musicly_profile_photo', localUri);
         await AsyncStorage.setItem('musicly_profile_photo_url', user.profilePhoto);
-        console.log('[Sync] Profile photo synced and saved locally:', localUri);
       } else {
-        console.warn('[Sync] Profile photo download returned null');
+        // If we have a corrupted local photo, clear it
+        if (localProfilePhoto) {
+          try {
+            await FileSystem.deleteAsync(resolveLocalPath(localProfilePhoto), { idempotent: true });
+            setLocalProfilePhoto(null);
+            await AsyncStorage.removeItem('musicly_profile_photo');
+          } catch (e) {}
+        }
       }
     } catch (err) {
       console.error('[Sync] Profile photo sync failed:', err);
     }
-  }, [user?.profilePhoto, localProfilePhoto, downloadFile]);
+  }, [user?.profilePhoto, localProfilePhoto, downloadFile, resolveLocalPath]);
+
+  const uploadProfilePhoto = useCallback(async (localUri) => {
+    if (!sessionId) return;
+    try {
+      // Step 1: Read as base64
+      const base64Data = await FileSystem.readAsStringAsync(localUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const dataUri = `data:image/jpeg;base64,${base64Data}`;
+
+      // Step 2: Upload to server
+      const response = await fetch(`${API_URL}/me/profile-photo`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionId}`
+        },
+        body: JSON.stringify({ base64: dataUri })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Step 3: Update local state immediately
+        const savedUri = await downloadFile(dataUri, 'profile');
+        if (savedUri) {
+          setLocalProfilePhoto(savedUri);
+          await AsyncStorage.setItem('musicly_profile_photo', savedUri);
+          await AsyncStorage.setItem('musicly_profile_photo_url', dataUri);
+        }
+        return data.user;
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (err) {
+      console.error('[Sync] Failed to upload profile photo:', err);
+      throw err;
+    }
+  }, [sessionId, API_URL, downloadFile]);
 
   const syncMusic = useCallback(async () => {
     if (!sessionId || syncing) return;
@@ -405,6 +483,7 @@ export function SyncProvider({ children }) {
         syncPlaylists,
         syncLikedSongs,
         syncProfilePhoto,
+        uploadProfilePhoto,
         toggleLike,
         localProfilePhoto,
         API_URL

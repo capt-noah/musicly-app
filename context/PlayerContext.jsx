@@ -22,7 +22,12 @@ export function PlayerProvider({ children }) {
   const collapsePlayer = () => setIsExpanded(false);
 
   // Initialize the player. We use useMemo to ensure it's created only once.
-  const player = useMemo(() => createAudioPlayer(''), []);
+  const player = useMemo(() => {
+    const p = createAudioPlayer('');
+    // Enable background playback and system controls
+    p.showNowPlayingControls = true;
+    return p;
+  }, []);
   const status = useAudioPlayerStatus(player);
 
   // Persistence Logic: Load and sync state on mount
@@ -142,7 +147,30 @@ export function PlayerProvider({ children }) {
       playerTrackId.current = null; // Unbind immediately to prevent double-skipping
       playNext(true);
     }
-  }, [status.playbackState, status.currentTime, status.duration, currentTrack?.id, status.playing]);
+  }, [status.playbackState, status.currentTime, status.duration, currentTrack?.id, status.playing, playNext]);
+
+  // Remote Control Sync: Listen to system-level play/pause/skip commands
+  useEffect(() => {
+    const playSub = player.addListener('play', () => {
+      player.play();
+    });
+    const pauseSub = player.addListener('pause', () => {
+      player.pause();
+    });
+    const nextSub = player.addListener('nextTrack', () => {
+      playNext(true);
+    });
+    const prevSub = player.addListener('previousTrack', () => {
+      playPrevious(true);
+    });
+
+    return () => {
+      playSub.remove();
+      pauseSub.remove();
+      nextSub.remove();
+      prevSub.remove();
+    };
+  }, [player, playNext, playPrevious]);
 
   const playTrack = async (track, newQueue = null, startPositionMs = 0, forcePlay = false) => {
     try {
@@ -178,6 +206,14 @@ export function PlayerProvider({ children }) {
       }
       player.play();
       setCurrentTrack(track);
+
+      // Update lock screen metadata
+      player.metadata = {
+        title: track.title,
+        artist: track.artistName || 'Unknown Artist',
+        album: track.albumTitle || 'Single',
+        artwork: resolveLocalPath(track.localCoverUri) || track.coverUrl,
+      };
       
       const state = { songId: track.id, positionMs: startPositionMs };
       
@@ -248,8 +284,8 @@ export function PlayerProvider({ children }) {
     playTrack(queue[nextIdx], null, 0, true);
   };
 
-  const playPrevious = () => {
-    if (status.currentTime > 3 || queue.length <= 1) {
+  const playPrevious = (force = false) => {
+    if (!force && (status.currentTime > 3 || queue.length <= 1)) {
       player.seekTo(0);
       player.play();
       return;

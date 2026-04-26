@@ -14,7 +14,8 @@ import interactionsRoutes from './routes/interactions.routes';
 
 const app = express();
 
-app.use('/uploads', express.static('uploads'));
+// Media files are served from external providers (Telegram) or stored as base64 in DB
+// No local storage used on server disk to prevent filling up storage
 
 // Express Config
 app.use(express.json());

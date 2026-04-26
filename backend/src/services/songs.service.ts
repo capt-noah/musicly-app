@@ -82,6 +82,17 @@ export async function saveMusic(
   albumId?: string,
   artistId?: string
 ): Promise<void> {
+  // Deduplication: Check if this file is already in the user's library
+  const [existing] = await db.select()
+    .from(music)
+    .where(and(eq(music.uploaderId, uploaderId), eq(music.audioFileId, audioFileId)))
+    .limit(1);
+
+  if (existing) {
+    console.log(`[Service] Song ${audioFileId} already exists for user ${uploaderId}. Skipping.`);
+    return;
+  }
+
   const [inserted] = await db.insert(music).values({
     uploaderId,
     albumId,
@@ -185,10 +196,10 @@ export async function updateSongMetadata(
     
     const artistName = data.artistName || currentArtist[0]?.name || 'Unknown Artist';
     
-    // If no album title is provided, group under 'Single'
+    // If no album title is provided, group under 'Standalone Tracks' to avoid generic 'Single' rows
     const albumTitle = (data.albumTitle && data.albumTitle.trim() !== '') 
       ? data.albumTitle 
-      : 'Single';
+      : 'Standalone Tracks';
 
     const artistId = await findOrCreateArtist(artistName);
     albumId = await findOrCreateAlbum(albumTitle, artistId, song.coverFileId || undefined);
