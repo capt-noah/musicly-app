@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Dimensions, Animated, RefreshControl, PanResponder } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Dimensions, Animated, PanResponder } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -181,7 +181,6 @@ export default function Home() {
   const { playTrack } = usePlayer();
   const [topTracks, setTopTracks] = useState([]);
   const [featured, setFeatured] = useState(FEATURED_PLAYLIST);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncSheetVisible, setSyncSheetVisible] = useState(false);
 
   const syncedList = Object.values(downloadedSongs).sort((a, b) => 
@@ -228,15 +227,6 @@ export default function Home() {
     fetchTopTracks();
   }, [BASE_URL]);
 
-  const handleRefresh = async () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await syncMusic();
-    } finally {
-      setTimeout(() => setIsRefreshing(false), 450);
-    }
-  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: TOKENS.surface }}>
@@ -270,7 +260,6 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 180 }}
         className="flex-1"
-        refreshControl={<RefreshControl refreshing={isRefreshing || syncing} onRefresh={handleRefresh} tintColor={TOKENS.primary} />}
       >
         <ShuffleCarousel 
           cards={dynamicAlbums.length > 5 ? dynamicAlbums.slice(0, 5) : dynamicAlbums} 

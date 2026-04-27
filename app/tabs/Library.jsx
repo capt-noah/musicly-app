@@ -25,7 +25,10 @@ const TOKENS = {
 };
 
 export default function Library() {
-  const { downloadedSongs, syncMusic, playlists, likedSongs, syncing, progress, resolveLocalPath, syncPlaylists } = useSync();
+  const { 
+    downloadedSongs, syncMusic, playlists, likedSongs, syncing, progress, 
+    resolveLocalPath, syncPlaylists, failedSongs, deleteFailedSong, retryFailedSync 
+  } = useSync();
   const { playTrack, currentTrack, isPlaying, addToQueue } = usePlayer();
   const [filter, setFilter] = useState('songs'); // 'playlists' | 'artists' | 'albums' | 'songs'
   const [selectedSong, setSelectedSong] = useState(null);
@@ -35,6 +38,7 @@ export default function Library() {
   const router = useRouter();
 
   const songsArray = useMemo(() => Object.values(downloadedSongs), [downloadedSongs]);
+  const failedArray = useMemo(() => Object.values(failedSongs), [failedSongs]);
 
   const handleEditSong = (song) => {
     setSelectedSong(song);
@@ -171,6 +175,50 @@ export default function Library() {
                   <Play size={20} color={TOKENS.primary} fill={TOKENS.primary} />
                 </TouchableOpacity>
               </TouchableOpacity>
+
+              {/* FAILED SYNC SECTION */}
+              {failedArray.length > 0 && (
+                <View className="mb-10">
+                  <View className="flex-row items-center mb-4">
+                    <Text style={{ color: '#ff4b4b' }} className="text-xl font-black mr-2">Failed Syncs</Text>
+                    <View style={{ backgroundColor: '#ff4b4b20' }} className="px-2 py-0.5 rounded-md">
+                      <Text style={{ color: '#ff4b4b' }} className="text-[10px] font-black">{failedArray.length}</Text>
+                    </View>
+                  </View>
+                  <View className="space-y-3">
+                    {failedArray.map(song => (
+                      <View 
+                        key={song.id} 
+                        style={{ backgroundColor: TOKENS.surfaceLow, borderColor: '#ff4b4b20', borderLeftWidth: 3 }}
+                        className="p-4 rounded-2xl flex-row items-center"
+                      >
+                        <View className="flex-1 mr-4">
+                          <Text style={{ color: TOKENS.onSurface }} className="font-black text-sm" numberOfLines={1}>{song.title}</Text>
+                          <Text style={{ color: '#ff4b4b', opacity: 0.8 }} className="text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                            {song.error || 'Download error'}
+                          </Text>
+                        </View>
+                        <View className="flex-row">
+                          <TouchableOpacity 
+                            onPress={() => retryFailedSync(song.id)}
+                            style={{ backgroundColor: TOKENS.primary + '20' }}
+                            className="w-9 h-9 rounded-full items-center justify-center mr-2"
+                          >
+                            <RefreshCw size={14} color={TOKENS.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            onPress={() => deleteFailedSong(song.id)}
+                            style={{ backgroundColor: '#ff4b4b20' }}
+                            className="w-9 h-9 rounded-full items-center justify-center"
+                          >
+                            <PlusCircle size={14} color="#ff4b4b" style={{ transform: [{ rotate: '45deg' }] }} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
 
               <View className="flex-row justify-between items-baseline mb-3">
                  <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">All Tracks</Text>

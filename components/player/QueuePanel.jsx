@@ -115,8 +115,8 @@ const QueuePanel = React.memo(({
                     </View>
                     <TouchableOpacity 
                       onPress={() => removeFromQueue(track.id)} 
-                      className="w-8 h-8 items-center justify-center rounded-full" 
-                      style={{ backgroundColor: "rgba(255,255,255,0.1)" }}
+                      className="items-center justify-center" 
+                      style={{ backgroundColor: "rgba(255,255,255,0.1)", width: 32, height: 32, borderRadius: 16 }}
                     >
                       <X size={14} color="#ffffff" strokeWidth={2.5} opacity={0.6} />
                     </TouchableOpacity>

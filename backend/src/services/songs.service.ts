@@ -229,3 +229,20 @@ export async function updateAlbumCover(albumId: string, coverArt: string) {
     .set({ coverArt })
     .where(eq(albums.id, albumId));
 }
+
+/**
+ * Permanently deletes a song from the library.
+ */
+export async function deleteSong(songId: string, userId: string): Promise<void> {
+  console.log(`[Service] Deleting song ${songId} for user ${userId}`);
+  
+  // 1. Delete from musicArtists (junction table)
+  await db.delete(musicArtists).where(eq(musicArtists.musicId, songId));
+  
+  // 2. Delete from topTracks if it exists
+  await db.delete(topTracks).where(eq(topTracks.songId, songId));
+  
+  // 3. Delete from the main music table
+  await db.delete(music)
+    .where(and(eq(music.id, songId), eq(music.uploaderId, userId)));
+}

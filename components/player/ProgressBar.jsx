@@ -17,7 +17,7 @@ const ProgressBar = React.memo(({
   duration 
 }) => {
   return (
-    <View className="mb-12">
+    <View className="mb-6">
       <View
         {...seekPanResponder.panHandlers}
         onLayout={(e) => {
@@ -26,8 +26,10 @@ const ProgressBar = React.memo(({
         }}
         style={{ height: 44, justifyContent: "center" }}
       >
+        {/* pointerEvents="none" on children ensures touches always land
+            on the outer container, making locationX consistently accurate */}
         <Animated.View
-          renderToHardwareTextureAndroid
+          pointerEvents="none"
           style={{
             height: 5,
             borderRadius: 99,
@@ -37,6 +39,7 @@ const ProgressBar = React.memo(({
           }}
         >
           <Animated.View
+            pointerEvents="none"
             style={{
               width: "100%",
               height: "100%",

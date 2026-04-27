@@ -32,9 +32,21 @@ router.get('/file/:file_id', authenticateSession, async (req: any, res) => {
     const file = await bot.getFile(req.params.file_id);
     const downloadUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
     res.json({ url: downloadUrl });
-  } catch (error) {
-    console.error('Error fetching file link:', error);
-    res.status(500).json({ error: 'Failed to generate download link' });
+  } catch (error: any) {
+    const message = error?.message || '';
+    console.error(`[Songs] Error fetching file link for ${req.params.file_id}:`, message);
+    
+    if (message.includes('wrong file_id') || message.includes('file is temporarily unavailable')) {
+      return res.status(410).json({ 
+        error: 'File expired or invalid',
+        details: 'The Telegram file link has expired. Please send the song to the bot again to refresh the link.'
+      });
+    }
+
+    res.status(500).json({ 
+      error: 'Failed to generate download link',
+      details: message || 'Unknown error'
+    });
   }
 });
 
@@ -61,6 +73,18 @@ router.patch('/:id/metadata', authenticateSession, async (req: any, res) => {
   } catch (error: any) {
     console.error(error);
     res.status(error.message.includes('not found') ? 404 : 500).json({ error: error.message });
+  }
+});
+
+// Delete a song from user's library
+router.delete('/:id', authenticateSession, async (req: any, res) => {
+  try {
+    const { deleteSong } = require('../services/songs.service');
+    await deleteSong(req.params.id, req.user.id);
+    res.status(204).send();
+  } catch (error: any) {
+    console.error(`[Songs] Error deleting song ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to delete song' });
   }
 });
 

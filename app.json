@@ -1,5 +1,5 @@
 {
-    "expo": {
+  "expo": {
     "name": "Musicly",
     "slug": "Musicly",
     "version": "1.0.0",
@@ -50,7 +50,13 @@
           }
         }
       ],
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,

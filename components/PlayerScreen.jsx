@@ -72,6 +72,16 @@ const PlayerScreen = ({ onCollapse }) => {
   const [isMoving, setIsMoving] = useState(false);
   const [lastTrackId, setLastTrackId] = useState(currentTrack?.id);
   const [scrubPosition, setScrubPosition] = useState(null);
+  
+  const uiOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(uiOpacity, {
+      toValue: lyricsOpen ? 0 : 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [lyricsOpen]);
 
   // Layout Refs & State
   const [artworkLayout, setArtworkLayout] = useState(null);
@@ -117,10 +127,10 @@ const PlayerScreen = ({ onCollapse }) => {
     currentQueueIndexRef.current = Math.max(queue.findIndex((t) => t.id === currentTrack?.id), 0);
   }, [duration, seekTo, queueMode, queue, repeatMode, currentTrack?.id]);
 
-  // Color Extraction Logic
   const rawCover = currentTrack?.localCoverUri || currentTrack?.coverUrl;
   const coverUri = resolveLocalPath(rawCover) || "https://picsum.photos/seed/musicly-cover/600/600";
 
+  // Color Extraction Logic
   useEffect(() => {
     let isMounted = true;
     if (!coverUri) return;
@@ -156,7 +166,7 @@ const PlayerScreen = ({ onCollapse }) => {
           Animated.timing(ambianceFade, {
             toValue: 1,
             duration: 800,
-            useNativeDriver: false,
+            useNativeDriver: true, // GPU Accelerated Opacity Crossfade
           }).start(() => {
             setCurrentColors(newColors);
             setTimeout(() => {
@@ -209,6 +219,7 @@ const PlayerScreen = ({ onCollapse }) => {
       onPanResponderGrant: (e) => {
         isScrubbing.current = true;
         activateScrub();
+        // locationX is now reliable because child bars have pointerEvents="none"
         scrubStartOffsetX.current = e.nativeEvent.locationX;
         const percent = Math.max(0, Math.min(100, (scrubStartOffsetX.current / Math.max(1, progressBarWidthRef.current)) * 100));
         scrubAnim.setValue(percent);
@@ -218,6 +229,8 @@ const PlayerScreen = ({ onCollapse }) => {
         const currentX = scrubStartOffsetX.current + gestureState.dx;
         const percent = Math.max(0, Math.min(100, (currentX / Math.max(1, progressBarWidthRef.current)) * 100));
         scrubAnim.setValue(percent);
+        // Update time label live during drag
+        if (durationRef.current) setScrubPosition((percent / 100) * durationRef.current);
       },
       onPanResponderRelease: (e, gestureState) => {
         isScrubbing.current = false;
@@ -285,12 +298,12 @@ const PlayerScreen = ({ onCollapse }) => {
         toValue: -84,
         duration: 300,
         easing: Easing.out(Easing.back(0.8)),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
       Animated.timing(upNextAnim, {
         toValue: 0,
         duration: 250,
-        useNativeDriver: false,
+        useNativeDriver: true,
       })
     ]).start(() => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -320,12 +333,12 @@ const PlayerScreen = ({ onCollapse }) => {
         toValue: 0,
         duration: 400,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
       Animated.timing(upNextAnim, {
         toValue: 1,
         duration: 400,
-        useNativeDriver: false,
+        useNativeDriver: true,
       })
     ]).start(() => setIsMoving(false));
   }, [isMoving, queue.length, playPrevious, upNextAnim]);
@@ -422,13 +435,19 @@ const PlayerScreen = ({ onCollapse }) => {
   const nextCoverUri = resolveLocalPath(nextQueueTrack?.localCoverUri) || nextQueueTrack?.coverUrl || coverUri;
 
   const toggleQueueMode = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 340,
+      create: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
+      update: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
+      delete: { type: LayoutAnimation.Types.spring, property: LayoutAnimation.Properties.scaleXY, springDamping: 0.75 },
+    });
     const nextValue = queueMode ? 0 : 1;
     setQueueMode(!queueMode);
     Animated.spring(queueAnim, {
       toValue: nextValue,
       friction: 8,
       tension: 40,
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
   }, [queueMode]);
 
@@ -451,7 +470,7 @@ const PlayerScreen = ({ onCollapse }) => {
   const artworkTranslateY = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [0, artworkTargetTranslateY] });
   const artworkTranslateX = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [0, artworkTargetTranslateX] });
   const artworkScale = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [1, miniTargetScale] });
-  const artworkBorderRadius = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 16 / miniTargetScale] });
+  const artworkBorderRadius = 24; // Static value to allow queueAnim to run natively
   const queuePanelOpacity = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
   const queuePanelTranslateY = queueAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
 
@@ -461,7 +480,7 @@ const PlayerScreen = ({ onCollapse }) => {
     // Only snap to 0 if we aren't already in a swipe transition to avoid flashing
     if (!wasSwipeRef.current) {
       upNextAnim.setValue(0);
-      Animated.timing(upNextAnim, { toValue: 1, duration: 260, useNativeDriver: false }).start();
+      Animated.timing(upNextAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
     } else {
       upNextAnim.setValue(1);
     }
@@ -473,7 +492,7 @@ const PlayerScreen = ({ onCollapse }) => {
     Animated.timing(queueShiftAnim, {
       toValue: -(idx + 1) * 84,
       duration: 350,
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start(() => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       playTrack(track, queue, 0, true);
@@ -491,7 +510,8 @@ const PlayerScreen = ({ onCollapse }) => {
       />
       
       <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
-        <View className="flex-1 px-8 pt-4 pb-12 relative" style={{ zIndex: 10 }}>
+        <Animated.View style={{ flex: 1, opacity: uiOpacity }} pointerEvents={lyricsOpen ? 'none' : 'auto'}>
+          <View className="flex-1 px-8 pt-4 pb-12 relative" style={{ zIndex: 10 }}>
           
           <QueuePanel 
             queueMode={queueMode}
@@ -564,6 +584,7 @@ const PlayerScreen = ({ onCollapse }) => {
             />
           </View>
         </View>
+        </Animated.View>
       </SafeAreaView>
 
       <LyricsSheet visible={lyricsOpen} onClose={() => setLyricsOpen(false)} />
@@ -573,12 +594,10 @@ const PlayerScreen = ({ onCollapse }) => {
 
 const Player = () => {
   const { currentTrack, isExpanded, expandPlayer, collapsePlayer } = usePlayer();
-  const [hasExpandedOnce, setHasExpandedOnce] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
     if (isExpanded) {
-      setHasExpandedOnce(true);
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
@@ -612,14 +631,13 @@ const Player = () => {
           height: SCREEN_HEIGHT,
           backgroundColor: TOKENS.surface,
           transform: [{ translateY: slideAnim }],
+          overflow: 'hidden', // Prevents the scaled cover art from bleeding over the bottom nav
         }}
         pointerEvents={isExpanded ? "auto" : "none"}
       >
-        {hasExpandedOnce && (
-          <View style={{ flex: 1 }}>
-            <PlayerScreen onCollapse={collapsePlayer} />
-          </View>
-        )}
+        <View style={{ flex: 1 }}>
+          <PlayerScreen onCollapse={collapsePlayer} />
+        </View>
       </Animated.View>
     </>
   );

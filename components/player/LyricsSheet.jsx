@@ -2,13 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Platform,
-  ScrollView,
+  FlatList,
   Text,
   TouchableOpacity,
   View,
+  StyleSheet,
+  PanResponder
 } from "react-native";
 import { X } from "lucide-react-native";
-import { TOKENS, SCREEN_HEIGHT } from "./playerUtils";
+import { BlurView } from "expo-blur";
+import { SCREEN_HEIGHT } from "./playerUtils";
 
 const LYRICS_LINES = [
   "Deep within the velvet silence",
@@ -30,10 +33,35 @@ const ACTIVE_LINE = 3;
 const LyricsSheet = React.memo(({ visible, onClose }) => {
   const [isRendered, setIsRendered] = useState(visible);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only capture vertical drag down
+        return gestureState.dy > 5 && Math.abs(gestureState.dx) < 20;
+      },
+      onPanResponderMove: Animated.event([null, { dy: panY }], {
+        useNativeDriver: false, // PanResponder requires false, but bypasses React state
+      }),
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 120 || gestureState.vy > 0.8) {
+          onClose(); // Parent handles hiding which triggers the useEffect down animation
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     if (visible) {
       setIsRendered(true);
+      panY.setValue(0);
       Animated.spring(slideAnim, {
         toValue: SCREEN_HEIGHT * 0.2,
         useNativeDriver: true,
@@ -41,11 +69,18 @@ const LyricsSheet = React.memo(({ visible, onClose }) => {
         speed: 14,
       }).start();
     } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 280,
-        useNativeDriver: true,
-      }).start(() => {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.timing(panY, {
+          toValue: 0,
+          duration: 280,
+          useNativeDriver: true,
+        })
+      ]).start(() => {
         setIsRendered(false);
       });
     }
@@ -55,17 +90,21 @@ const LyricsSheet = React.memo(({ visible, onClose }) => {
 
   return (
     <Animated.View
-      renderToHardwareTextureAndroid
-      shouldRasterizeIOS
       style={{
         position: "absolute",
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.82,
-        transform: [{ translateY: slideAnim }],
-        backgroundColor: TOKENS.surfaceLow,
-        borderTopLeftRadius: 40,
-        borderTopRightRadius: 40,
+        transform: [
+          { translateY: slideAnim },
+          { 
+            translateY: panY.interpolate({
+              inputRange: [0, SCREEN_HEIGHT],
+              outputRange: [0, SCREEN_HEIGHT],
+              extrapolate: 'clamp'
+            }) 
+          }
+        ],
         zIndex: 200,
         elevation: 20,
         shadowColor: "#000",
@@ -74,49 +113,68 @@ const LyricsSheet = React.memo(({ visible, onClose }) => {
         shadowRadius: 20,
       }}
     >
-      {/* Handle */}
-      <View className="items-center pt-3 pb-2">
-        <View style={{ backgroundColor: TOKENS.onSurfaceVariant, opacity: 0.2 }} className="w-10 h-1 rounded-full" />
+      {/* Glossy Translucent Background (Glassmorphism) */}
+      <View style={[
+        StyleSheet.absoluteFillObject, 
+        { 
+          borderTopLeftRadius: 40, 
+          borderTopRightRadius: 40, 
+          overflow: 'hidden',
+          backgroundColor: "rgba(255, 255, 255, 0.08)",
+          borderColor: "rgba(255, 255, 255, 0.2)",
+          borderWidth: 1,
+          borderBottomWidth: 0,
+        }
+      ]}>
+        <BlurView intensity={70} tint="default" style={StyleSheet.absoluteFillObject} />
+        {/* Subtle dark overlay to ensure the stark white text stays readable */}
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.3)' }]} />
       </View>
 
-      {/* Header */}
-      <View className="flex-row justify-between items-center px-8 py-5">
-        <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-lg font-black tracking-tight">
-          Lyrics
-        </Text>
-        <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-          <X size={22} color={TOKENS.onSurfaceVariant} strokeWidth={2} />
-        </TouchableOpacity>
+      {/* Draggable Header Area */}
+      <View {...panResponder.panHandlers}>
+        {/* Handle with extra top gap */}
+        <View className="items-center pt-5 pb-2">
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.4)' }} className="w-12 h-1.5 rounded-full" />
+        </View>
+
+        {/* Header */}
+        <View className="flex-row justify-between items-center px-8 pb-4">
+          <Text style={{ color: '#FFFFFF', letterSpacing: -0.5 }} className="text-xl font-black tracking-tight">
+            Lyrics
+          </Text>
+          <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: 6, borderRadius: 20 }}>
+            <X size={20} color={'#FFFFFF'} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Lyrics Lines */}
-      <ScrollView
-        className="flex-1 px-8 pt-4"
+      {/* Lyrics List */}
+      <FlatList
+        data={LYRICS_LINES}
+        keyExtractor={(item, index) => index.toString()}
+        contentContainerStyle={{ paddingHorizontal: 32, paddingTop: 8, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        removeClippedSubviews={true}
-      >
-        {LYRICS_LINES.map((line, i) => {
-          const isActive = i === ACTIVE_LINE;
+        renderItem={({ item, index }) => {
+          const isActive = index === ACTIVE_LINE;
 
           return (
             <Text
-              key={i}
               style={{
-                fontSize: isActive ? 24 : 20,
+                fontSize: isActive ? 28 : 22,
                 fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed',
-                fontWeight: isActive ? "900" : "700",
-                color: isActive ? TOKENS.primary : TOKENS.surfaceHigh,
-                lineHeight: isActive ? 34 : 28,
+                fontWeight: isActive ? "900" : "600",
+                color: isActive ? "#FFFFFF" : "rgba(255, 255, 255, 0.4)",
+                lineHeight: isActive ? 38 : 32,
                 marginBottom: 32,
                 letterSpacing: -0.5,
               }}
             >
-              {line}
+              {item}
             </Text>
           );
-        })}
-      </ScrollView>
+        }}
+      />
     </Animated.View>
   );
 });

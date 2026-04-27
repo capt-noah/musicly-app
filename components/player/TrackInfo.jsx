@@ -11,39 +11,51 @@ const TrackInfo = React.memo(({
   queueMode 
 }) => {
   return (
-    <View className="flex-row items-center justify-between mb-10 overflow-hidden">
-      {/* Mini-cover placeholder that pushes the text when queue is open */}
-      <Animated.View 
+    <View className="flex-row items-center justify-between mb-6 overflow-hidden">
+      {/* Invisible layout target for the artwork to fly into */}
+      <View 
         onLayout={(e) => setTargetPlaceholderLayout(e.nativeEvent.layout)}
         style={{
           height: 56,
-          width: queueAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 72] // 56px cover + 16px margin
-          }),
-          opacity: queueAnim,
-          transform: [
-            { scale: queueAnim },
-          ],
+          width: 72,
+          position: 'absolute',
+          left: 0,
           zIndex: 10,
         }}
+        pointerEvents="none"
       />
 
-      <View style={{ flex: 1, paddingRight: 12 }}>
-        <Text 
-          style={{ color: TOKENS.tertiary, letterSpacing: -1.5 }} 
-          className="text-3xl font-black mb-1.5" 
-          numberOfLines={1}
-        >
-          {currentTrack.title}
-        </Text>
-        <Text 
-          style={{ color: "#ffffff", letterSpacing: -0.5 }} 
-          className="text-[17px] font-bold opacity-90" 
-          numberOfLines={1}
-        >
-          {currentTrack.artistName || "Unknown Artist"}
-        </Text>
+      {/* 
+        flex:1 + overflow:hidden ensures the text is clipped at its own
+        boundary and never bleeds over the right-side buttons.
+        The inner Animated.View slides purely on the GPU via translateX.
+      */}
+      <View style={{ flex: 1, overflow: 'hidden', paddingRight: 12 }}>
+        <Animated.View style={{
+          width: '100%',
+          transform: [{
+            translateX: queueAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 72],
+              extrapolate: 'clamp',
+            })
+          }]
+        }}>
+          <Text 
+            style={{ color: TOKENS.tertiary, letterSpacing: -1, fontSize: 24 }} 
+            className="font-black mb-1" 
+            numberOfLines={1}
+          >
+            {currentTrack.title}
+          </Text>
+          <Text 
+            style={{ color: "#ffffff", letterSpacing: -0.5 }} 
+            className="text-[17px] font-bold opacity-90" 
+            numberOfLines={1}
+          >
+            {currentTrack.artistName || "Unknown Artist"}
+          </Text>
+        </Animated.View>
       </View>
 
       <View className="flex-row items-center">
