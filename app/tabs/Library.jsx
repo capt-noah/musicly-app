@@ -8,6 +8,7 @@ import { useSync } from '../../context/SyncContext';
 import { usePlayer } from '../../context/PlayerContext';
 import EditMetadataModal from '../../components/EditMetadataModal';
 import CreatePlaylistModal from '../../components/CreatePlaylistModal';
+import SyncSheet from '../../components/SyncSheet';
 import { PinchGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 
@@ -34,6 +35,7 @@ export default function Library() {
   const [selectedSong, setSelectedSong] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [syncSheetVisible, setSyncSheetVisible] = useState(false);
   const [albumZoomLevel, setAlbumZoomLevel] = useState(2); // 2 = Grid, 1 = List
   const router = useRouter();
 
@@ -60,14 +62,15 @@ export default function Library() {
   const albums = useMemo(() => {
     const albumMap = {};
     songsArray.forEach(song => {
-      // Create a stable key based on title and artist, normalized to handle casing inconsistencies
+      // Prioritize albumId if available, otherwise fall back to name-based grouping
+      const groupingKey = song.albumId || `${(song.albumTitle || 'Unknown Album').toLowerCase().trim()}_${(song.artistName || 'Unknown Artist').toLowerCase().trim()}`;
+      
       const albumTitle = song.albumTitle || 'Unknown Album';
       const artistName = song.artistName || 'Unknown Artist';
-      const groupingKey = `${albumTitle.toLowerCase().trim()}_${artistName.toLowerCase().trim()}`;
-      
+
       if (!albumMap[groupingKey]) {
         albumMap[groupingKey] = { 
-          id: song.albumId || groupingKey,
+          id: groupingKey,
           title: albumTitle, 
           artist: artistName, 
           cover: song.localCoverUri, 
@@ -124,12 +127,12 @@ export default function Library() {
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -1.5 }} className="text-4xl font-black">Library</Text>
             <View className="flex-row items-center">
               {syncing && (
-                <View style={{ backgroundColor: TOKENS.primary + '15' }} className="px-4 py-2 rounded-full flex-row items-center mr-3">
+                <TouchableOpacity onPress={() => setSyncSheetVisible(true)} style={{ backgroundColor: TOKENS.primary + '15' }} className="px-4 py-2 rounded-full flex-row items-center mr-3">
                   <ActivityIndicator size="small" color={TOKENS.primary} style={{ marginRight: 8 }} />
                   <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black uppercase tracking-widest">
-                    {progress.current}/{progress.total}
+                    {Math.floor(progress.current)}/{progress.total}
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
               <TouchableOpacity onPress={() => syncMusic()} style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-10 h-10 rounded-full items-center justify-center">
                  <RefreshCw size={18} color={TOKENS.primary} />
@@ -447,6 +450,11 @@ export default function Library() {
         visible={createModalVisible}
         onClose={() => setCreateModalVisible(false)}
         onCreated={() => syncPlaylists()}
+      />
+
+      <SyncSheet 
+        visible={syncSheetVisible} 
+        onClose={() => setSyncSheetVisible(false)} 
       />
       </SafeAreaView>
     </GestureHandlerRootView>

@@ -103,4 +103,28 @@ router.post('/albums/:id/cover', authenticateSession, async (req: any, res) => {
   }
 });
 
+// Get user's liked songs
+router.get('/likes', authenticateSession, async (req: any, res) => {
+  try {
+    const { getLikedSongs } = require('../services/songs.service');
+    const liked = await getLikedSongs(req.user.id);
+    res.json(liked);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Toggle like for a song
+router.post('/:id/like', authenticateSession, async (req: any, res) => {
+  try {
+    const { toggleLike } = require('../services/songs.service');
+    const isLiked = await toggleLike(req.user.id, req.params.id);
+    res.json({ liked: isLiked });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

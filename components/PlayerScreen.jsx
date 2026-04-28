@@ -178,7 +178,7 @@ const PlayerScreen = ({ onCollapse }) => {
           });
         }
       })
-      .catch((err) => console.warn("Color extraction error:", err));
+      .catch((err) => {});
 
     return () => { isMounted = false; };
   }, [coverUri, currentTrack?.id]);
@@ -250,13 +250,13 @@ const PlayerScreen = ({ onCollapse }) => {
 
   // Track Transition Sync
   useEffect(() => {
+    // If the track ID changed, we run the slide animations
     if (currentTrack?.id !== lastTrackId) {
       queueShiftAnim.setValue(0);
       setIsMoving(false);
       setLastTrackId(currentTrack?.id);
       
       if (wasSwipeRef.current) {
-        // If it was a swipe, we finish the motion smoothly
         const w = artworkPixelWidthRef.current || SCREEN_WIDTH;
         const startPos = coverSwipeDir.current === 1 ? w : -w;
         coverSwipeAnim.setValue(startPos);
@@ -268,7 +268,6 @@ const PlayerScreen = ({ onCollapse }) => {
         }).start();
         wasSwipeRef.current = false;
       } else {
-        // If it was a button press or auto-play, we use a distinct slide-in
         const w = artworkPixelWidthRef.current || SCREEN_WIDTH;
         coverSwipeAnim.setValue(coverSwipeDir.current * (w / 1.5));
         Animated.spring(coverSwipeAnim, {
@@ -278,8 +277,17 @@ const PlayerScreen = ({ onCollapse }) => {
           tension: 40,
         }).start();
       }
+    } else if (isMoving) {
+      // If we were moving but the ID is the same (Repeat One or same song play), 
+      // we still need to unlock the controls.
+      setIsMoving(false);
+      Animated.spring(coverSwipeAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+      }).start();
     }
-  }, [currentTrack?.id, lastTrackId]);
+  }, [currentTrack?.id, lastTrackId, isMoving]);
 
   // Queue Handlers
   const handleNext = useCallback((isSwipe = false) => {

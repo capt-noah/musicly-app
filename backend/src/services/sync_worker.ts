@@ -47,11 +47,15 @@ async function startWorkerLoop() {
           let artistId: string | undefined = undefined;
           
           if (audioData.performer || audioData.album || audioData.title) {
-            const artistName = audioData.performer || 'Unknown Artist';
+            const artistName = (audioData.performer || 'Unknown Artist').trim();
             artistId = await findOrCreateArtist(artistName);
             
-            // If no album metadata, group under 'Standalone Tracks' to avoid creating unique albums for every track
-            const albumName = audioData.album || 'Standalone Tracks';
+            // If no album metadata, group under 'Standalone Tracks'
+            let albumName = (audioData.album || 'Standalone Tracks').trim();
+            if (albumName.toLowerCase() === 'standalone tracks') {
+              albumName = 'Standalone Tracks';
+            }
+            
             albumId = await findOrCreateAlbum(albumName, artistId, item.coverId || undefined);
           }
           // -------------------------------

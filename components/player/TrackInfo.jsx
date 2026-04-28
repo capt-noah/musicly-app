@@ -1,6 +1,7 @@
 import React from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { Heart, Menu } from "lucide-react-native";
+import { useSync } from "../../context/SyncContext";
 import { TOKENS } from "./playerUtils";
 
 const TrackInfo = React.memo(({ 
@@ -10,6 +11,9 @@ const TrackInfo = React.memo(({
   toggleQueueMode, 
   queueMode 
 }) => {
+  const { toggleLike, likedSongs } = useSync();
+  const isLiked = React.useMemo(() => likedSongs.some(s => s.id === currentTrack.id), [likedSongs, currentTrack.id]);
+
   return (
     <View className="flex-row items-center justify-between mb-6 overflow-hidden">
       {/* Invisible layout target for the artwork to fly into */}
@@ -59,11 +63,24 @@ const TrackInfo = React.memo(({
       </View>
 
       <View className="flex-row items-center">
-        <TouchableOpacity className="mr-3">
-          <Heart size={26} color="#ffffff" strokeWidth={2} />
+        <TouchableOpacity className="mr-3" onPress={() => toggleLike(currentTrack.id)}>
+          <Heart 
+            size={24} 
+            color={isLiked ? TOKENS.primary : "#ffffff"} 
+            fill={isLiked ? TOKENS.primary : "transparent"}
+            strokeWidth={2} 
+          />
         </TouchableOpacity>
-        <TouchableOpacity onPress={toggleQueueMode}>
-          <Menu size={26} color={queueMode ? TOKENS.primary : "#ffffff"} strokeWidth={2} />
+        <TouchableOpacity 
+          onPress={toggleQueueMode}
+          className="w-10 h-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: queueMode ? 'rgba(185, 203, 186, 0.15)' : 'transparent' }}
+        >
+          <Menu 
+            size={24} 
+            color={queueMode ? TOKENS.primary : "#ffffff"} 
+            strokeWidth={queueMode ? 3 : 2} 
+          />
         </TouchableOpacity>
       </View>
     </View>

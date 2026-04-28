@@ -108,9 +108,9 @@ const LyricsSheet = React.memo(({ visible, onClose }) => {
         zIndex: 200,
         elevation: 20,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: -10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 15,
       }}
     >
       {/* Glossy Translucent Background (Glassmorphism) */}
@@ -120,10 +120,7 @@ const LyricsSheet = React.memo(({ visible, onClose }) => {
           borderTopLeftRadius: 40, 
           borderTopRightRadius: 40, 
           overflow: 'hidden',
-          backgroundColor: "rgba(255, 255, 255, 0.08)",
-          borderColor: "rgba(255, 255, 255, 0.2)",
-          borderWidth: 1,
-          borderBottomWidth: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.2)", // Darker base for better contrast
         }
       ]}>
         <BlurView intensity={70} tint="default" style={StyleSheet.absoluteFillObject} />

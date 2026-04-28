@@ -183,9 +183,25 @@ export default function Home() {
   const [featured, setFeatured] = useState(FEATURED_PLAYLIST);
   const [syncSheetVisible, setSyncSheetVisible] = useState(false);
 
-  const syncedList = Object.values(downloadedSongs).sort((a, b) => 
-    new Date(b.syncedAt) - new Date(a.syncedAt)
-  );
+  const syncedAlbums = React.useMemo(() => {
+    const albumMap = {};
+    Object.values(downloadedSongs).forEach(song => {
+      const key = song.albumId || `unassigned-${song.id}`;
+      if (!albumMap[key] || new Date(song.syncedAt) > new Date(albumMap[key].newestSyncedAt)) {
+        albumMap[key] = {
+          id: key,
+          title: song.albumTitle || song.title,
+          artist: song.artistName || 'Unknown Artist',
+          cover: song.localCoverUri,
+          newestSyncedAt: song.syncedAt,
+          songs: [] // We'll fill this if we want to play all, but usually we navigate
+        };
+      }
+    });
+    return Object.values(albumMap).sort((a, b) => 
+      new Date(b.newestSyncedAt) - new Date(a.newestSyncedAt)
+    );
+  }, [downloadedSongs]);
 
   const dynamicAlbums = React.useMemo(() => {
     const albumMap = {};
@@ -238,7 +254,7 @@ export default function Home() {
               <TouchableOpacity onPress={() => setSyncSheetVisible(true)} style={{ backgroundColor: TOKENS.primary + '15' }} className="px-4 py-2 rounded-full flex-row items-center mr-3">
                 <CloudDownload size={14} color={TOKENS.primary} />
                 <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-widest ml-2">
-                  {progress.current}/{progress.total}
+                  {Math.floor(progress.current)}/{progress.total}
                 </Text>
               </TouchableOpacity>
             )}
@@ -273,19 +289,23 @@ export default function Home() {
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -0.5 }} className="text-2xl font-black">Recently synced</Text>
             <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold tracking-widest">LIBRARY</Text>
           </View>
-          {syncedList.length > 0 ? (
+          {syncedAlbums.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-              {syncedList.map((song) => (
-                <TouchableOpacity key={song.id} className="mr-3 w-40" onPress={() => playTrack(song, syncedList)}>
-                  <View style={{ backgroundColor: TOKENS.surfaceLow }} className="aspect-square rounded-3xl overflow-hidden mb-4">
+              {syncedAlbums.map((album) => (
+                <TouchableOpacity 
+                  key={album.id} 
+                  className="mr-6 w-44" 
+                  onPress={() => router.push({ pathname: '/playlist', params: { albumId: album.id, title: album.title, artist: album.artist, cover: album.cover }})}
+                >
+                  <View style={{ backgroundColor: TOKENS.surfaceLow }} className="aspect-square rounded-[40px] overflow-hidden mb-5">
                     <Image 
-                      source={{ uri: resolveLocalPath(song.localCoverUri) || 'https://via.placeholder.com/600' }} 
+                      source={{ uri: resolveLocalPath(album.cover) || 'https://via.placeholder.com/600' }} 
                       style={{ width: '100%', height: '100%' }} 
                       contentFit="cover"
                     />
                   </View>
-                  <Text style={{ color: TOKENS.onSurface }} className="font-bold text-base tracking-tight mb-0.5" numberOfLines={1}>{song.title}</Text>
-                  <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-semibold tracking-[0.1em] opacity-50" numberOfLines={1}>{song.artistName || 'Unknown Artist'}</Text>
+                  <Text style={{ color: TOKENS.onSurface }} className="font-black text-lg tracking-tight mb-1" numberOfLines={1}>{album.title}</Text>
+                  <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-black tracking-widest uppercase opacity-40" numberOfLines={1}>{album.artist}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>

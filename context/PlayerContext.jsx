@@ -46,6 +46,7 @@ export function PlayerProvider({ children }) {
 
   const player = useMemo(() => {
     const p = createAudioPlayer('');
+    // expo-audio uses .metadata for lock screen info
     p.showNowPlayingControls = true;
     return p;
   }, []);
@@ -142,12 +143,11 @@ export function PlayerProvider({ children }) {
       }
 
       const current = currentTrackRef.current;
-      if (current?.id === track.id) {
-        // Optimization: If it's the same song, just seek and play instead of replacing source
-        if (player.playing && !forcePlay) {
+      if (current?.id === track.id && !forcePlay) {
+        // Optimization: If it's the same song and not a forced replay, just toggle
+        if (player.playing) {
           player.pause();
         } else {
-          player.seekTo(startPositionMs / 1000);
           player.play();
         }
         return;
@@ -160,12 +160,14 @@ export function PlayerProvider({ children }) {
       setCurrentTrack(track);
       currentTrackRef.current = track;
 
-      player.setActiveForLockScreen(true, {
+      const artworkUri = resolveLocalPath(track.localCoverUri) || track.coverUrl;
+      
+      player.metadata = {
         title: track.title,
         artist: track.artistName || 'Unknown Artist',
         album: track.albumTitle || 'Single',
-        artwork: resolveLocalPath(track.localCoverUri) || track.coverUrl,
-      });
+        artwork: artworkUri,
+      };
 
       const state = { songId: track.id, positionMs: startPositionMs };
       AsyncStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state))
@@ -236,14 +238,12 @@ export function PlayerProvider({ children }) {
   const lastLoggedState = useRef('');
 
   useEffect(() => {
-    console.log('[Player] Initializing status listener...');
     
     // Using a direct listener on the player instance is more robust than monitoring hook state
     const sub = player.addListener('playbackStatusUpdate', (status) => {
       // 1. Log state changes for diagnosis (throttled/filtered)
       const stateKey = `${status.playbackState}_${status.playing}`;
       if (stateKey !== lastLoggedState.current) {
-        console.log(`[Player] State Change: ${status.playbackState} (Playing: ${status.playing})`);
         lastLoggedState.current = stateKey;
       }
 
@@ -257,8 +257,7 @@ export function PlayerProvider({ children }) {
       if ((isFinished || isNearEnd) && status.playing === false && wasPlayingRef.current) {
         wasPlayingRef.current = false; // Reset immediately
         
-        if (advanceGuardRef.current !== currentTrackRef.current?.id) {
-          console.log(`[Player] Track Finished: ${currentTrackRef.current?.title}. Advancing...`);
+        if (advanceGuardRef.current !== currentTrackRef.current?.id || repeatModeRef.current === 'ONE') {
           advanceGuardRef.current = currentTrackRef.current?.id;
           playNext(true);
         }
@@ -270,7 +269,6 @@ export function PlayerProvider({ children }) {
     });
 
     return () => {
-      console.log('[Player] Cleaning up status listener...');
       sub.remove();
     };
   }, [player, playNext]);
@@ -278,23 +276,22 @@ export function PlayerProvider({ children }) {
   // Remote Control Sync (Lock Screen / Control Center)
   useEffect(() => {
     const playSub = player.addListener('play', () => {
-      console.log('[Player] Remote Command: Play');
       player.play();
     });
     const pauseSub = player.addListener('pause', () => {
-      console.log('[Player] Remote Command: Pause');
       player.pause();
     });
+    
+    // In expo-audio, these events are triggered from Lock Screen / Control Center
     const nextSub = player.addListener('nextTrack', () => {
-      console.log('[Player] Remote Command: Next');
       playNext(true);
     });
     const prevSub = player.addListener('previousTrack', () => {
-      console.log('[Player] Remote Command: Previous');
       playPrevious();
     });
-    const seekSub = player.addListener('seek', (position) => {
-      console.log(`[Player] Remote Command: Seek to ${position}`);
+    
+    const seekSub = player.addListener('seek', (event) => {
+      const position = typeof event === 'number' ? event : event.position;
       player.seekTo(position);
     });
     

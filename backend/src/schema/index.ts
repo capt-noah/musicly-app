@@ -7,3 +7,4 @@ export * from "./interactions";
 export * from "./sessions";
 export * from "./syncQueue";
 export * from "./playback_states";
+export * from "./likes";

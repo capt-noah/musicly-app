@@ -1,16 +1,28 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, Image, ActivityIndicator, Alert } from 'react-native';
-import { X, Camera, Save, Music, Mic2, Disc } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { X, Camera, Save, Music, Mic2, Disc, Trash2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
+import { useSync } from '../context/SyncContext';
+import SonicSheet from './SonicSheet';
 
 export default function EditMetadataModal({ visible, onClose, song, onUpdate }) {
   const { BASE_URL, sessionId } = useAuth();
-  const [title, setTitle] = useState(song?.title || '');
-  const [artist, setArtist] = useState(song?.artistName || '');
-  const [album, setAlbum] = useState(song?.albumTitle || '');
+  const { resolveLocalPath, updateSongMetadataLocally } = useSync();
+  const [title, setTitle] = useState('');
+  const [artist, setArtist] = useState('');
+  const [album, setAlbum] = useState('');
   const [loading, setLoading] = useState(false);
   const [newCover, setNewCover] = useState(null);
+
+  useEffect(() => {
+    if (song) {
+      setTitle(song.title || '');
+      setArtist(song.artistName || '');
+      setAlbum(song.albumTitle || '');
+      setNewCover(null);
+    }
+  }, [song, visible]);
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -40,6 +52,7 @@ export default function EditMetadataModal({ visible, onClose, song, onUpdate }) 
       });
 
       if (!metaResponse.ok) throw new Error('Failed to update metadata');
+      const updatedData = await metaResponse.json();
 
       // 2. Update Album Cover if changed
       if (newCover && song.albumId) {
@@ -54,7 +67,13 @@ export default function EditMetadataModal({ visible, onClose, song, onUpdate }) 
         if (!coverResponse.ok) throw new Error('Failed to update album cover');
       }
 
-      Alert.alert('Success', 'Metadata updated successfully! Regrouping library...');
+      Alert.alert('Success', 'Metadata updated successfully!');
+      updateSongMetadataLocally(song.id, { 
+        title: updatedData.title, 
+        artistName: updatedData.artistName, 
+        albumTitle: updatedData.albumTitle,
+        albumId: updatedData.albumId
+      });
       onUpdate();
       onClose();
     } catch (error) {
@@ -66,91 +85,129 @@ export default function EditMetadataModal({ visible, onClose, song, onUpdate }) 
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true}>
-      <View className="flex-1 bg-black/60 justify-end">
-        <View className="bg-[#111412] rounded-t-[40px] px-8 pt-6 pb-12 border-t border-white/10">
-          <View className="flex-row justify-between items-center mb-8">
-            <Text className="text-[#e1e7df] text-2xl font-black tracking-tighter">Edit Metadata</Text>
-            <TouchableOpacity onPress={onClose} className="bg-white/5 p-2 rounded-full">
-              <X size={20} color="#a6ada6" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Cover Art Picker */}
-          <View className="items-center mb-10">
-            <TouchableOpacity onPress={handlePickImage} className="relative">
-              <Image 
-                source={{ uri: newCover?.uri || song?.localCoverUri }} 
-                className="w-40 h-40 rounded-[32px] border border-white/10"
-              />
-              <View className="absolute bottom-[-10] right-[-10] bg-[#b9cbba] p-3 rounded-2xl shadow-xl">
-                <Camera size={20} color="#344437" />
-              </View>
-            </TouchableOpacity>
-            <Text className="text-[#a6ada6] text-[10px] uppercase font-bold tracking-widest mt-6">Change Album Cover</Text>
-          </View>
-
-          {/* Inputs */}
-          <View className="space-y-6">
-            <View>
-              <View className="flex-row items-center mb-2 px-1">
-                <Music size={12} color="#b9cbba" className="mr-2" />
-                <Text className="text-[#a6ada6] text-[10px] uppercase font-bold tracking-widest">Song Title</Text>
-              </View>
-              <TextInput 
-                value={title}
-                onChangeText={setTitle}
-                className="bg-white/5 text-[#e1e7df] px-5 py-4 rounded-2xl font-bold text-base border border-white/5"
-                placeholder="Enter title..."
-                placeholderTextColor="#434944"
-              />
-            </View>
-
-            <View>
-              <View className="flex-row items-center mb-2 px-1">
-                <Mic2 size={12} color="#b9cbba" className="mr-2" />
-                <Text className="text-[#a6ada6] text-[10px] uppercase font-bold tracking-widest">Artist Name</Text>
-              </View>
-              <TextInput 
-                value={artist}
-                onChangeText={setArtist}
-                className="bg-white/5 text-[#e1e7df] px-5 py-4 rounded-2xl font-bold text-base border border-white/5"
-                placeholder="Enter artist..."
-                placeholderTextColor="#434944"
-              />
-            </View>
-
-            <View>
-              <View className="flex-row items-center mb-2 px-1">
-                <Disc size={12} color="#b9cbba" className="mr-2" />
-                <Text className="text-[#a6ada6] text-[10px] uppercase font-bold tracking-widest">Album Title</Text>
-              </View>
-              <TextInput 
-                value={album}
-                onChangeText={setAlbum}
-                className="bg-white/5 text-[#e1e7df] px-5 py-4 rounded-2xl font-bold text-base border border-white/5"
-                placeholder="Enter album..."
-                placeholderTextColor="#434944"
-              />
-            </View>
-          </View>
-
+    <SonicSheet 
+      visible={visible} 
+      onClose={onClose} 
+      title="Edit Song"
+      heightPercent={0.88}
+    >
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ paddingHorizontal: 40, paddingTop: 24, paddingBottom: 60 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Cover Art Picker */}
+        <View className="items-center mb-12">
           <TouchableOpacity 
-            onPress={handleSave}
-            disabled={loading}
-            className="bg-[#b9cbba] mt-10 py-5 rounded-[24px] flex-row items-center justify-center shadow-2xl shadow-[#b9cbba]/20"
+            onPress={handlePickImage} 
+            activeOpacity={0.8}
+            className="relative"
+            style={{
+              shadowColor: '#b9cbba',
+              shadowOffset: { width: 0, height: 12 },
+              shadowOpacity: 0.15,
+              shadowRadius: 20,
+            }}
           >
-            {loading ? (
-              <ActivityIndicator color="#344437" />
-            ) : (
-              <>
-                <Save size={20} color="#344437" className="mr-3" />
-                <Text className="text-[#344437] font-black text-base uppercase tracking-widest">Save Changes</Text>
-              </>
-            )}
+            <Image 
+              source={{ uri: newCover?.uri || resolveLocalPath(song?.localCoverUri) }} 
+              style={{ width: 160, height: 160, marginBottom: 12, borderRadius: 40, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}
+            />
           </TouchableOpacity>
+          <Text style={{ color: '#a6ada6', letterSpacing: 2.5 }} className="text-[9px] uppercase font-black mt-8 opacity-40">
+            Tap to change artwork
+          </Text>
         </View>
-      </View>
-    </Modal>
+
+        {/* Form Fields */}
+        <View className="flex flex-col gap-6 mb-6">
+          <View>
+            <View className="flex-row gap-2 items-center mb-2 px-1">
+              <Music size={12} color="#b9cbba" className=" opacity-60" />
+              <Text style={{ color: '#a6ada6', letterSpacing: 1.5 }} className="text-[10px] uppercase font-black opacity-60">Title</Text>
+            </View>
+            <TextInput 
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Song Title"
+              placeholderTextColor="rgba(255,255,255,0.15)"
+              selectionColor="#b9cbba"
+              style={{ 
+                backgroundColor: 'rgba(255,255,255,0.03)', 
+                color: '#ffffff',
+                fontSize: 17,
+                letterSpacing: -0.5
+              }}
+              className="px-6 py-5 rounded-3xl font-black border border-white/5"
+            />
+          </View>
+
+          <View>
+            <View className="flex-row gap-2 items-center mb-2 px-1">
+              <Mic2 size={12} color="#b9cbba" className="mr-2.5 opacity-60" />
+              <Text style={{ color: '#a6ada6', letterSpacing: 1.5 }} className="text-[10px] uppercase font-black opacity-60">Artist</Text>
+            </View>
+            <TextInput 
+              value={artist}
+              onChangeText={setArtist}
+              placeholder="Artist Name"
+              placeholderTextColor="rgba(255,255,255,0.15)"
+              selectionColor="#b9cbba"
+              style={{ 
+                backgroundColor: 'rgba(255,255,255,0.03)', 
+                color: '#ffffff',
+                fontSize: 17,
+                letterSpacing: -0.5
+              }}
+              className="px-6 py-5 rounded-3xl font-black border border-white/5"
+            />
+          </View>
+
+          <View>
+            <View className="flex-row gap-2 items-center mb-2 px-1">
+              <Disc size={12} color="#b9cbba" className="mr-2.5 opacity-60" />
+              <Text style={{ color: '#a6ada6', letterSpacing: 1.5 }} className="text-[10px] uppercase font-black opacity-60">Album</Text>
+            </View>
+            <TextInput 
+              value={album}
+              onChangeText={setAlbum}
+              placeholder="Album Title"
+              placeholderTextColor="rgba(255,255,255,0.15)"
+              selectionColor="#b9cbba"
+              style={{ 
+                backgroundColor: 'rgba(255,255,255,0.03)', 
+                color: '#ffffff',
+                fontSize: 17,
+                letterSpacing: -0.5
+              }}
+              className="px-6 py-5 rounded-3xl font-black border border-white/5"
+            />
+          </View>
+        </View>
+
+        {/* Action Button */}
+        <TouchableOpacity 
+          onPress={handleSave}
+          disabled={loading}
+          activeOpacity={0.7}
+          style={{ 
+            backgroundColor: '#b9cbba',
+            shadowColor: '#b9cbba',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.25,
+            shadowRadius: 15,
+          }}
+          className=" py-6 rounded-[32px] flex-row items-center justify-center"
+        >
+          {loading ? (
+            <ActivityIndicator color="#0d0f0d" />
+          ) : (
+            <View className="flex-row items-center">
+              <Text style={{ color: '#0d0f0d', letterSpacing: 2 }} className="font-black text-sm uppercase">Save Changes</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </SonicSheet>
   );
 }

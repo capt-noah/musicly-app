@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
@@ -27,6 +28,7 @@ const STORAGE_KEY = 'musicly_downloaded_songs';
 const MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
 const COVERS_DIR = `${FileSystem.documentDirectory}covers/`;
 const PROFILE_DIR = `${FileSystem.documentDirectory}profile/`;
+const SYNC_CHANNEL_ID = 'sync-progress';
 
 export function SyncProvider({ children }) {
   const { sessionId, user, API_URL } = useAuth();
@@ -41,6 +43,13 @@ export function SyncProvider({ children }) {
   const [localProfilePhoto, setLocalProfilePhoto] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const notificationIdRef = useRef(null);
+  const syncingRef = useRef(false);
+  const totalRef = useRef(0);
+  const currentTrackIndexRef = useRef(0);
+  const successCountRef = useRef(0);
+  const failCountRef = useRef(0);
+  const lastNotificationUpdateRef = useRef(0);
+  const lastUpdateRef = useRef({});
 
   // Get base URL (stripping /api if it exists for routes like /songs)
   const BASE_URL = API_URL.replace(/\/api$/, '');
@@ -55,40 +64,56 @@ export function SyncProvider({ children }) {
     return `${FileSystem.documentDirectory}${path}`;
   }, []);
 
-  // Initialize storage directories
+  // Initialize storage, permissions and notifications
   useEffect(() => {
     async function init() {
+      // 1. Storage Directories
       const musicInfo = await FileSystem.getInfoAsync(MUSIC_DIR);
       if (!musicInfo.exists) await FileSystem.makeDirectoryAsync(MUSIC_DIR, { recursive: true });
-      
       const coversInfo = await FileSystem.getInfoAsync(COVERS_DIR);
       if (!coversInfo.exists) await FileSystem.makeDirectoryAsync(COVERS_DIR, { recursive: true });
-
       const profileInfo = await FileSystem.getInfoAsync(PROFILE_DIR);
       if (!profileInfo.exists) await FileSystem.makeDirectoryAsync(PROFILE_DIR, { recursive: true });
 
+      // 2. Notification Permissions & Channel
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync(SYNC_CHANNEL_ID, {
+            name: 'Sync Progress',
+            importance: Notifications.AndroidImportance.LOW,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#b9cbba',
+          });
+        }
+      } catch (e) {
+        console.warn('Notification init failed:', e);
+      }
+
+      // 3. Load State
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) setDownloadedSongs(JSON.parse(stored));
-
       const storedPlaylists = await AsyncStorage.getItem('musicly_playlists');
       if (storedPlaylists) setPlaylists(JSON.parse(storedPlaylists));
-
       const storedProfilePhoto = await AsyncStorage.getItem('musicly_profile_photo');
       if (storedProfilePhoto) setLocalProfilePhoto(storedProfilePhoto);
-
       const storedFailed = await AsyncStorage.getItem('musicly_failed_songs');
       if (storedFailed) setFailedSongs(JSON.parse(storedFailed));
 
       if (sessionId) {
-        await syncLikedSongs();
+        await syncLikes();
       }
 
       setIsInitialized(true);
     }
     init();
   }, [sessionId]);
-
-  const lastUpdateRef = useRef({});
 
   const updateFileProgress = (fileId, progressValue) => {
     const now = Date.now();
@@ -100,35 +125,53 @@ export function SyncProvider({ children }) {
         [fileId]: progressValue
       }));
       lastUpdateRef.current[fileId] = now;
+
+      // Update global progress state for the UI, but DO NOT update notification here to avoid spam
+      if (syncingRef.current && totalRef.current > 0) {
+        const floatProgress = currentTrackIndexRef.current + progressValue;
+        setProgress({ current: floatProgress, total: totalRef.current });
+      }
     }
   };
 
-  const updateSyncNotification = async (current, total) => {
+  const updateSyncNotification = async (current, total, successCount = 0, failCount = 0) => {
     try {
-      if (current === total) {
-        if (notificationIdRef.current) {
-          await Notifications.dismissNotificationAsync(notificationIdRef.current);
-          notificationIdRef.current = null;
-        }
-        return;
+      const isFinished = current >= total && total > 0;
+      
+      const progressInt = Math.floor(current);
+      
+      let title = 'Musicly Sync';
+      let body = '';
+
+      if (isFinished) {
+        title = failCount > 0 ? 'Sync Finished with Issues' : 'Sync Complete';
+        body = failCount > 0 
+          ? `Synced ${successCount} tracks, ${failCount} failed.` 
+          : `Successfully synced ${total} tracks.`;
+      } else {
+        body = `Processing track ${progressInt + 1} of ${total}`;
       }
 
-      const content = {
-        title: 'Syncing Library',
-        body: `Syncing ${current} of ${total} songs...`,
-        priority: Notifications.AndroidPriority.LOW,
-        sticky: true,
-      };
-
-      if (notificationIdRef.current) {
-        // Updating existing notification if possible (Expo notifications doesn't have a direct 'update' with progress bar yet, but we can re-schedule)
-        await Notifications.dismissNotificationAsync(notificationIdRef.current);
-      }
-      notificationIdRef.current = await Notifications.scheduleNotificationAsync({
-        content,
-        trigger: null, // show immediately
+      await Notifications.scheduleNotificationAsync({
+        identifier: 'musicly-sync-progress',
+        content: {
+          title,
+          body,
+          sticky: !isFinished,
+          priority: Notifications.AndroidNotificationPriority.LOW,
+          sound: false,
+        },
+        trigger: null,
       });
-    } catch (e) {}
+
+      if (isFinished && failCount === 0) {
+        setTimeout(() => {
+          Notifications.dismissNotificationAsync('musicly-sync-progress');
+        }, 5000);
+      }
+    } catch (e) {
+      console.warn('Notification update failed:', e);
+    }
   };
 
   /**
@@ -144,7 +187,6 @@ export function SyncProvider({ children }) {
       const realArtist = metadata.common.artist;
       const realTitle = metadata.common.title;
 
-      console.log(`[Metadata] Extracted for ${song.id}: "${realTitle}" | "${realArtist}" | "${realAlbum}"`);
 
       // Report real metadata back to server so grouping is accurate
       let updatedMetadata = null;
@@ -164,10 +206,8 @@ export function SyncProvider({ children }) {
 
         if (syncRes.ok) {
           updatedMetadata = await syncRes.json();
-          console.log(`[Metadata] Server updated successfully for ${song.id}. New Album: ${updatedMetadata.albumTitle} (ID: ${updatedMetadata.albumId})`);
         }
       } catch (err) {
-        console.warn('Failed to sync metadata back to server:', err);
       }
       
       let coverUri = null;
@@ -186,7 +226,6 @@ export function SyncProvider({ children }) {
       
       return { coverUri, updatedMetadata };
     } catch (err) {
-      console.log(`No embedded art or error in ${song.id}:`, err);
       return { coverUri: null, updatedMetadata: null };
     }
   };
@@ -267,47 +306,64 @@ export function SyncProvider({ children }) {
     }
   }, [sessionId, API_URL]);
 
-  const syncLikedSongs = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const response = await fetch(`${API_URL}/interactions/songs/liked`, {
-        headers: { 'Authorization': `Bearer ${sessionId}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setLikedSongs(data);
-      }
-    } catch (error) {
-      console.error('Liked songs sync failed:', error);
-    }
-  }, [sessionId, API_URL]);
 
-  const toggleLike = useCallback(async (songId) => {
-    if (!sessionId) return;
-    
-    // Optimistic update
-    const isCurrentlyLiked = likedSongs.some(s => s.id === songId);
-    if (isCurrentlyLiked) {
-      setLikedSongs(prev => prev.filter(s => s.id !== songId));
-    } else {
-      const songData = Object.values(downloadedSongs).find(s => s.id === songId);
-      if (songData) setLikedSongs(prev => [songData, ...prev]);
-    }
+/**
+* Toggles liked status for a song
+*/
+const toggleLike = useCallback(async (songId) => {
+if (!sessionId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/interactions/songs/${songId}/like`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${sessionId}` }
-      });
-      if (!response.ok) {
-        // Revert on error
-        await syncLikedSongs();
-      }
-    } catch (error) {
-      console.error('Toggle like failed:', error);
-      await syncLikedSongs();
+// Optimistic UI update
+setLikedSongs(prev => {
+  const isLiked = prev.some(s => s.id === songId);
+  if (isLiked) {
+    return prev.filter(s => s.id !== songId);
+  } else {
+    // Find the song in downloadedSongs to get metadata
+    const songData = downloadedSongs[songId];
+    if (!songData) return prev;
+    return [songData, ...prev];
+  }
+});
+
+try {
+  const response = await fetch(`${BASE_URL}/songs/${songId}/like`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionId}`,
     }
-  }, [sessionId, API_URL, likedSongs, downloadedSongs, syncLikedSongs]);
+  });
+  
+  if (!response.ok) throw new Error('Like toggle failed');
+  
+  const data = await response.json();
+  // If the server says something different, we could correct here, 
+  // but usually optimistic is fine.
+} catch (error) {
+  console.warn('Error toggling like:', error);
+  // Revert if failed (optional, depends on UX preference)
+}
+}, [sessionId, BASE_URL, downloadedSongs]);
+
+/**
+* Fetch liked songs from server
+*/
+const syncLikes = useCallback(async () => {
+if (!sessionId) return;
+try {
+  const response = await fetch(`${BASE_URL}/songs/likes`, {
+    headers: {
+      'Authorization': `Bearer ${sessionId}`,
+    }
+  });
+  if (response.ok) {
+    const data = await response.json();
+    setLikedSongs(data);
+  }
+} catch (error) {
+  console.warn('Failed to sync likes:', error);
+}
+}, [sessionId, BASE_URL]);
 
   const syncProfilePhoto = useCallback(async () => {
     if (!user?.profilePhoto) return;
@@ -374,30 +430,71 @@ export function SyncProvider({ children }) {
       if (!response.ok) return;
 
       const pendingSongs = await response.json();
-      setSyncQueue(pendingSongs);
-      setFileProgresses({});
+      
+      // Pre-filter: Check which songs actually need downloading
+      const actualDownloads = [];
+      for (const song of pendingSongs) {
+        const existing = downloadedSongs[song.id];
+        let needsDownload = !existing;
+        let needsCoverUpdate = false;
+
+        if (existing) {
+          // Check audio
+          if (existing.localAudioUri) {
+            try {
+              const info = await FileSystem.getInfoAsync(resolveLocalPath(existing.localAudioUri));
+              if (!info.exists) needsDownload = true;
+            } catch (e) { needsDownload = true; }
+          } else {
+            needsDownload = true;
+          }
+
+          // Check if cover art was updated on server (compare IDs or check if local exists)
+          if (!existing.localCoverUri) {
+            needsCoverUpdate = true;
+          } else if (song.coverFileId && existing.coverFileId !== song.coverFileId) {
+            needsCoverUpdate = true;
+          }
+        }
+
+        if (needsDownload || needsCoverUpdate) {
+          if (!failedSongs[song.id] || isBackground) {
+            actualDownloads.push(song);
+          }
+        }
+      }
 
       const newDownloads = { ...downloadedSongs };
       const currentFailed = { ...failedSongs };
       let updated = false;
       let failedUpdated = false;
+      let successCount = 0;
+      let failCount = 0;
 
-      setProgress({ current: 0, total: pendingSongs.length });
-      await updateSyncNotification(0, pendingSongs.length);
+      setSyncQueue(actualDownloads);
+      setFileProgresses({});
+
+      // Only show notification if there are actual downloads to perform
+      const totalToDownload = actualDownloads.length;
+      let currentDownloadIndex = 0;
+
+      if (totalToDownload > 0) {
+        setProgress({ current: 0, total: totalToDownload });
+        await updateSyncNotification(0, totalToDownload);
+      }
+
+      syncingRef.current = true;
+      totalRef.current = actualDownloads.length;
+      currentTrackIndexRef.current = 0;
+      successCountRef.current = 0;
+      failCountRef.current = 0;
 
       for (let i = 0; i < pendingSongs.length; i++) {
         const song = pendingSongs[i];
         const existing = newDownloads[song.id];
         
-        if (currentFailed[song.id] && !isBackground) continue;
-
-        let needsDownload = !existing;
-        if (existing?.localAudioUri) {
-          try {
-            const info = await FileSystem.getInfoAsync(resolveLocalPath(existing.localAudioUri));
-            if (!info.exists) needsDownload = true;
-          } catch (e) { needsDownload = true; }
-        }
+        // Check if this specific song was marked for download
+        const needsDownload = actualDownloads.some(s => s.id === song.id);
 
         if (needsDownload) {
           let audioUri = null;
@@ -415,35 +512,73 @@ export function SyncProvider({ children }) {
             const absoluteAudioPath = resolveLocalPath(audioUri);
             const { coverUri, updatedMetadata } = await extractCoverArt(absoluteAudioPath, song);
             let finalCoverUri = coverUri;
+            
+            // If no embedded cover, or if we explicitly need a cover update from server
             if (!finalCoverUri && song.coverFileId) {
               const { uri: coverRes } = await downloadFile(song.coverFileId, 'cover');
               finalCoverUri = coverRes;
             }
 
             const finalSongData = updatedMetadata || song;
-            newDownloads[song.id] = { ...finalSongData, localAudioUri: audioUri, localCoverUri: finalCoverUri, syncedAt: new Date().toISOString() };
+            newDownloads[song.id] = { 
+              ...finalSongData, 
+              localAudioUri: audioUri, 
+              localCoverUri: finalCoverUri, 
+              syncedAt: new Date().toISOString(),
+              coverFileId: song.coverFileId // Store this to detect future changes
+            };
             updated = true;
+            successCountRef.current++;
             if (currentFailed[song.id]) {
               delete currentFailed[song.id];
               failedUpdated = true;
             }
             updateFileProgress(song.audioFileId, 1);
+          } else if (existing && existing.localAudioUri) {
+            // Audio exists but maybe we just need a cover update
+            let finalCoverUri = existing.localCoverUri;
+            if (song.coverFileId && existing.coverFileId !== song.coverFileId) {
+              const { uri: coverRes } = await downloadFile(song.coverFileId, 'cover');
+              if (coverRes) finalCoverUri = coverRes;
+            }
+            
+            newDownloads[song.id] = { 
+              ...existing, 
+              ...song, 
+              localCoverUri: finalCoverUri, 
+              coverFileId: song.coverFileId 
+            };
+            updated = true;
+            successCountRef.current++;
+            updateFileProgress(song.audioFileId, 1);
           } else {
             currentFailed[song.id] = { ...song, error: lastError || 'Download failed', failedAt: new Date().toISOString() };
             failedUpdated = true;
+            failCountRef.current++;
+          }
+          
+          currentTrackIndexRef.current++;
+          if (totalRef.current > 0) {
+            setProgress({ current: currentTrackIndexRef.current, total: totalRef.current });
+            if (currentTrackIndexRef.current % 2 === 0 || currentTrackIndexRef.current === totalRef.current) {
+              await updateSyncNotification(currentTrackIndexRef.current, totalRef.current, successCountRef.current, failCountRef.current);
+            }
           }
         } else {
-          updateFileProgress(song.audioFileId, 1);
-          if (existing.artistName !== song.artistName || existing.title !== song.title) {
+          // Song exists, just check for metadata updates silently
+          if (existing && (
+            existing.artistName !== song.artistName || 
+            existing.title !== song.title ||
+            existing.albumTitle !== song.albumTitle
+          )) {
             newDownloads[song.id] = { ...existing, ...song };
             updated = true;
           }
         }
         
-        const newProgress = i + 1;
-        setProgress({ current: newProgress, total: pendingSongs.length });
-        if (i % 2 === 0) await updateSyncNotification(newProgress, pendingSongs.length);
-        if (updated && (i % 5 === 0 || i === pendingSongs.length - 1)) setDownloadedSongs({ ...newDownloads });
+        if (updated && (i % 5 === 0 || i === pendingSongs.length - 1)) {
+          setDownloadedSongs({ ...newDownloads });
+        }
       }
 
       if (updated) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newDownloads));
@@ -457,6 +592,7 @@ export function SyncProvider({ children }) {
       console.error(`Sync error:`, error);
     } finally {
       setSyncing(false);
+      syncingRef.current = false;
       setSyncQueue([]);
     }
   }, [sessionId, downloadedSongs, syncing, failedSongs, BASE_URL, API_URL, syncPlaylists]);
@@ -506,7 +642,7 @@ export function SyncProvider({ children }) {
 
     if (sessionId && isInitialized) {
       syncMusic();
-      syncLikedSongs();
+      syncLikes();
       syncProfilePhoto();
       initBackgroundSync();
     }
@@ -524,31 +660,26 @@ export function SyncProvider({ children }) {
     });
   }, [syncMusic]);
 
+  const updateSongMetadataLocally = useCallback(async (songId, metadata) => {
+    setDownloadedSongs(prev => {
+      const existing = prev[songId];
+      if (!existing) return prev;
+      const updated = { ...existing, ...metadata };
+      const newSongs = { ...prev, [songId]: updated };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newSongs)).catch(console.error);
+      return newSongs;
+    });
+  }, []);
+
   return (
-    <SyncContext.Provider
-      value={{
-        downloadedSongs,
-        playlists,
-        likedSongs,
-        syncing,
-        progress,
-        syncQueue,
-        fileProgresses,
-        isInitialized,
-        resolveLocalPath,
-        syncMusic,
-        syncPlaylists,
-        syncLikedSongs,
-        syncProfilePhoto,
-        uploadProfilePhoto,
-        toggleLike,
-        deleteFailedSong,
-        retryFailedSync,
-        localProfilePhoto,
-        failedSongs,
-        API_URL
-      }}
-    >
+    <SyncContext.Provider value={{ 
+      downloadedSongs, syncing, progress, syncMusic, resolveLocalPath, 
+      localProfilePhoto, syncQueue, fileProgresses, playlists, syncPlaylists,
+      likedSongs, toggleLike, syncLikes,
+      failedSongs, deleteFailedSong, retryFailedSync,
+      syncProfilePhoto, uploadProfilePhoto,
+      API_URL, updateSongMetadataLocally
+    }}>
       {children}
     </SyncContext.Provider>
   );

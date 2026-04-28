@@ -111,11 +111,11 @@ export default function SyncSheet({ visible, onClose }) {
     <SonicSheet 
       visible={visible} 
       onClose={onClose} 
-      title="Sync Pipeline"
+      title="Sync"
       heightPercent={0.75}
     >
-      <View className="px-8 flex-1">
-        <View className="mb-8 flex-row justify-between items-center px-2">
+      <View className="px-8 mt-6 flex-1">
+        <View className="mb-10 flex-row justify-between items-center px-2">
           <Text style={{ color: TOKENS.onSurfaceVariant, fontSize: 10, fontWeight: '900', letterSpacing: 2.5, textTransform: 'uppercase' }}>
             {syncQueue.length === 0 ? 'Queue Empty' : `${syncQueue.length} Tracks Processing`}
           </Text>
