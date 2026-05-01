@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, Mic2, Disc, Music, Grid, Play, AudioLines, RefreshCw, PlusCircle, Users } from 'lucide-react-native';
+import { Heart, Mic2, Disc, Music, Grid, Play, AudioLines, RefreshCw, PlusCircle, Users, LayoutGrid, List, AlignLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useSync } from '../../context/SyncContext';
 import { usePlayer } from '../../context/PlayerContext';
@@ -11,6 +11,10 @@ import CreatePlaylistModal from '../../components/CreatePlaylistModal';
 import SyncSheet from '../../components/SyncSheet';
 import { PinchGestureHandler, State, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Sonic Atelier Design Tokens
 const TOKENS = {
@@ -25,6 +29,87 @@ const TOKENS = {
   tertiary: '#fff8f2',
 };
 
+const AlbumItem = React.memo(({ album, zoomLevel, onPress, resolveLocalPath }) => {
+  if (zoomLevel === 1) { // 1-col Large
+    return (
+      <TouchableOpacity 
+        style={{ backgroundColor: TOKENS.surfaceLow }}
+        className="w-full rounded-[48px] mb-8 overflow-hidden"
+        onPress={onPress}
+      >
+        <View className="w-full aspect-square">
+          <Image source={{ uri: resolveLocalPath(album.cover) || `https://api.dicebear.com/7.x/shapes/png?seed=${album.id}&backgroundColor=1c211d` }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
+        </View>
+        <View className="p-8 flex-row items-center justify-between">
+          <View className="flex-1 mr-4">
+            <Text style={{ color: TOKENS.onSurface }} className="font-black text-2xl tracking-tight mb-1" numberOfLines={1}>{album.title}</Text>
+            <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-sm font-semibold opacity-60" numberOfLines={1}>
+              {album.artist} • {album.plays || 0} plays
+            </Text>
+          </View>
+          <View style={{ backgroundColor: TOKENS.primary }} className="w-14 h-14 rounded-full items-center justify-center">
+             <Play size={24} color={TOKENS.surface} fill={TOKENS.surface} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  if (zoomLevel === 2) { // 2-col Grid
+    return (
+      <TouchableOpacity 
+        className="w-[48%] mb-10"
+        onPress={onPress}
+      >
+        <View style={{ backgroundColor: TOKENS.surfaceLow }} className="w-full aspect-square rounded-[40px] mb-4 overflow-hidden">
+          <Image source={{ uri: resolveLocalPath(album.cover) || `https://api.dicebear.com/7.x/shapes/png?seed=${album.id}&backgroundColor=1c211d` }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
+        </View>
+        <Text style={{ color: TOKENS.onSurface }} className="font-black text-base tracking-tight" numberOfLines={1}>{album.title}</Text>
+        <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60" numberOfLines={1}>
+          {album.artist} • {album.plays || 0} plays
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  if (zoomLevel === 3) { // 1-col Small
+    return (
+      <TouchableOpacity 
+        style={{ backgroundColor: TOKENS.surfaceLow }}
+        className="flex-row items-center p-3 rounded-[32px] mb-4"
+        onPress={onPress}
+      >
+        <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-16 h-16 rounded-[20px] mr-5 overflow-hidden">
+          <Image source={{ uri: resolveLocalPath(album.cover) || `https://api.dicebear.com/7.x/shapes/png?seed=${album.id}&backgroundColor=1c211d` }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
+        </View>
+        <View className="flex-1 justify-center">
+          <Text style={{ color: TOKENS.onSurface }} className="font-black text-lg tracking-tight" numberOfLines={1}>{album.title}</Text>
+          <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60" numberOfLines={1}>
+            {album.artist} • {album.plays || 0} plays
+          </Text>
+        </View>
+        <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-widest mr-4 uppercase opacity-80">{album.count} Tracks</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  // Level 4: Text-only
+  return (
+    <TouchableOpacity 
+      className="py-4 border-b border-white/5 flex-row items-center justify-between"
+      onPress={onPress}
+    >
+      <View className="flex-1 mr-4">
+         <Text style={{ color: TOKENS.onSurface }} className="font-black text-base tracking-tight" numberOfLines={1}>{album.title}</Text>
+         <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-0.5">
+           {album.artist} • {album.plays || 0} plays
+         </Text>
+      </View>
+      <Disc size={16} color={TOKENS.primary} opacity={0.4} />
+    </TouchableOpacity>
+  );
+});
+
 export default function Library() {
   const { 
     downloadedSongs, syncMusic, playlists, likedSongs, syncing, progress, 
@@ -36,10 +121,25 @@ export default function Library() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [syncSheetVisible, setSyncSheetVisible] = useState(false);
-  const [albumZoomLevel, setAlbumZoomLevel] = useState(2); // 2 = Grid, 1 = List
+  const [albumZoomLevel, setAlbumZoomLevel] = useState(2); // 1: 1-col Large, 2: 2-col Grid, 3: 1-col Small, 4: Text-only
+  const [sortMode, setSortMode] = useState('A-Z'); // 'A-Z' | 'Recent' | 'Artist'
+  const scrollRef = useRef(null);
+  const letterOffsets = useRef({});
+  const listBaseOffset = useRef(0);
   const router = useRouter();
 
-  const songsArray = useMemo(() => Object.values(downloadedSongs), [downloadedSongs]);
+  const songsArray = useMemo(() => {
+    let base = Object.values(downloadedSongs);
+    if (sortMode === 'A-Z') {
+      return base.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortMode === 'Recent') {
+      return base.sort((a, b) => new Date(b.syncedAt) - new Date(a.syncedAt));
+    } else if (sortMode === 'Artist') {
+      return base.sort((a, b) => (a.artistName || '').localeCompare(b.artistName || ''));
+    }
+    return base;
+  }, [downloadedSongs, sortMode]);
+
   const failedArray = useMemo(() => Object.values(failedSongs), [failedSongs]);
 
   const handleEditSong = (song) => {
@@ -74,17 +174,22 @@ export default function Library() {
           title: albumTitle, 
           artist: artistName, 
           cover: song.localCoverUri, 
-          count: 0 
+          count: 0,
+          plays: 0
         };
       }
       albumMap[groupingKey].count++;
+      albumMap[groupingKey].plays += (song.plays || 0);
     });
     return Object.values(albumMap);
   }, [songsArray]);
 
   const renderFilterButton = (id, label) => (
     <TouchableOpacity 
-      onPress={() => setFilter(id)}
+      onPress={() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setFilter(id);
+      }}
       style={{ 
         backgroundColor: filter === id ? TOKENS.primary : TOKENS.surfaceHigh,
       }}
@@ -101,15 +206,38 @@ export default function Library() {
 
   const onPinchEvent = (event) => {
     if (event.nativeEvent.state === State.END) {
-      if (event.nativeEvent.scale > 1.2 && albumZoomLevel === 2) {
-        // Zooming IN sets it to max detail mode (List view)
+      const scale = event.nativeEvent.scale;
+      let nextLevel = albumZoomLevel;
+
+      if (scale > 1.2 && albumZoomLevel < 4) {
+        nextLevel = albumZoomLevel + 1;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setAlbumZoomLevel(1);
-      } else if (event.nativeEvent.scale < 0.8 && albumZoomLevel === 1) {
-        // Zooming OUT sets it to normal mode (Grid view)
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setAlbumZoomLevel(2);
+      } else if (scale < 0.8 && albumZoomLevel > 1) {
+        nextLevel = albumZoomLevel - 1;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
+
+      if (nextLevel !== albumZoomLevel) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setAlbumZoomLevel(nextLevel);
+      }
+    }
+  };
+
+  const changeZoomLevel = (direction) => {
+    let nextLevel = albumZoomLevel;
+    if (direction === 'in' && albumZoomLevel < 4) {
+      nextLevel = albumZoomLevel + 1;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else if (direction === 'out' && albumZoomLevel > 1) {
+      nextLevel = albumZoomLevel - 1;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (nextLevel !== albumZoomLevel) {
+      // Use standard preset for guaranteed visibility
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setAlbumZoomLevel(nextLevel);
     }
   };
 
@@ -119,6 +247,52 @@ export default function Library() {
     }
   };
 
+  const scrollToLetter = (letter) => {
+    const availableLetters = Object.keys(letterOffsets.current).sort();
+    
+    console.log('[Alphabet Scrubber] Tapped:', letter);
+    console.log('[Alphabet Scrubber] Available Letters:', availableLetters);
+    console.log('[Alphabet Scrubber] Current Offsets:', letterOffsets.current);
+    console.log('[Alphabet Scrubber] List Base Offset:', listBaseOffset.current);
+
+    if (availableLetters.length === 0) {
+      console.log('[Alphabet Scrubber] No available letters to scroll to.');
+      return;
+    }
+
+    let targetOffset = letterOffsets.current[letter];
+
+    // If the exact letter has no songs, find the next closest letter
+    if (targetOffset === undefined) {
+      let closest = availableLetters[0];
+      for (const l of availableLetters) {
+        if (l >= letter) {
+          closest = l;
+          break;
+        }
+      }
+      // If the target letter is past our last available letter, just go to the end
+      if (letter > availableLetters[availableLetters.length - 1]) {
+        closest = availableLetters[availableLetters.length - 1];
+      }
+      console.log(`[Alphabet Scrubber] Exact letter not found. Falling back to: ${closest}`);
+      targetOffset = letterOffsets.current[closest];
+    }
+
+    console.log('[Alphabet Scrubber] Target Y Offset:', targetOffset);
+
+    if (targetOffset !== undefined && scrollRef.current) {
+      const finalOffset = targetOffset + listBaseOffset.current - 20;
+      console.log('[Alphabet Scrubber] Scrolling to Final Y Offset:', finalOffset);
+      scrollRef.current.scrollTo({ y: Math.max(0, finalOffset), animated: true });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      console.log('[Alphabet Scrubber] Scroll failed: targetOffset is undefined or scrollRef is null.', { scrollRefHasCurrent: !!scrollRef.current });
+    }
+  };
+
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1, backgroundColor: TOKENS.surface }}>
@@ -126,6 +300,32 @@ export default function Library() {
         <View className="py-6 mb-2 flex-row justify-between items-center">
             <Text style={{ color: TOKENS.tertiary, letterSpacing: -1.5 }} className="text-4xl font-black">Library</Text>
             <View className="flex-row items-center">
+              {filter === 'albums' && (
+                <View className="flex-row items-center mr-2 bg-white/5 rounded-full p-1">
+                    <TouchableOpacity 
+                     onPress={() => changeZoomLevel('in')} 
+                     disabled={albumZoomLevel === 4}
+                     style={{ opacity: albumZoomLevel === 4 ? 0.3 : 1 }}
+                     className="w-8 h-8 items-center justify-center"
+                   >
+                     <LayoutGrid size={16} color={TOKENS.primary} />
+                   </TouchableOpacity>
+                </View>
+              )}
+              {filter === 'songs' && (
+                <TouchableOpacity 
+                  onPress={() => {
+                    const modes = ['A-Z', 'Recent', 'Artist'];
+                    const next = modes[(modes.indexOf(sortMode) + 1) % modes.length];
+                    setSortMode(next);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
+                  className="bg-white/5 px-4 py-1.5 rounded-full flex-row items-center mr-3"
+                >
+                  <AlignLeft size={14} color={TOKENS.primary} className="mr-2" />
+                  <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black uppercase tracking-widest">{sortMode}</Text>
+                </TouchableOpacity>
+              )}
               {syncing && (
                 <TouchableOpacity onPress={() => setSyncSheetVisible(true)} style={{ backgroundColor: TOKENS.primary + '15' }} className="px-4 py-2 rounded-full flex-row items-center mr-3">
                   <ActivityIndicator size="small" color={TOKENS.primary} style={{ marginRight: 8 }} />
@@ -149,9 +349,13 @@ export default function Library() {
           </ScrollView>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 180 }}>
+        <ScrollView 
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: 180 }}
+        >
           {filter === 'songs' && (
-            <View>
+            <View collapsable={false}>
               <TouchableOpacity 
                 onPress={() => router.push('/favorites')}
                 style={{ 
@@ -235,22 +439,43 @@ export default function Library() {
                   <Text style={{ color: TOKENS.onSurfaceVariant, letterSpacing: 4 }} className="font-black uppercase text-[10px]">No tracks found</Text>
                </View>
               ) : (
-                <View className="space-y-3">
-                  {songsArray.map(song => (
-                    <TouchableOpacity 
-                      key={song.id} 
-                      onPress={() => playTrack(song, songsArray)}
-                      onLongPress={() => handleEditSong(song)}
-                      style={{ 
-                        backgroundColor: currentTrack?.id === song.id ? TOKENS.surfaceHighest : TOKENS.surfaceHigh,
-                        marginBottom: 10,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.2,
-                        shadowRadius: 8,
-                      }}
-                      className="flex-row items-center py-3 px-5 rounded-[40px]"
-                    >
+              <View 
+                collapsable={false}
+                onLayout={(e) => {
+                  listBaseOffset.current = e.nativeEvent.layout.y;
+                }}
+                className="space-y-3"
+              >
+                  {songsArray.map((song, index) => {
+                    let firstLetter = song.title.charAt(0).toUpperCase();
+                    if (!/[A-Z]/.test(firstLetter)) firstLetter = '#';
+                    
+                    let prevFirstLetter = index > 0 ? songsArray[index - 1].title.charAt(0).toUpperCase() : null;
+                    if (prevFirstLetter && !/[A-Z]/.test(prevFirstLetter)) prevFirstLetter = '#';
+                    
+                    const isFirstOfLetter = index === 0 || prevFirstLetter !== firstLetter;
+
+                    return (
+                      <TouchableOpacity 
+                        key={song.id} 
+                        onLayout={(e) => {
+                          if (isFirstOfLetter && sortMode === 'A-Z') {
+                            // Store Y relative to the start of this View
+                            letterOffsets.current[firstLetter] = e.nativeEvent.layout.y;
+                          }
+                        }}
+                        onPress={() => playTrack(song, songsArray)}
+                        onLongPress={() => handleEditSong(song)}
+                        style={{ 
+                          backgroundColor: currentTrack?.id === song.id ? TOKENS.surfaceHighest : TOKENS.surfaceHigh,
+                          marginBottom: 10,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 8,
+                        }}
+                        className="flex-row items-center py-3 px-5 rounded-[40px]"
+                      >
                        <View className="relative bg-black rounded-xl mr-4 overflow-hidden">
                           <Image source={{ uri: resolveLocalPath(song.localCoverUri) }} style={{ width: 44, height: 44 }} contentFit="cover" transition={200} />
                           {currentTrack?.id === song.id && (
@@ -271,9 +496,28 @@ export default function Library() {
                           >
                             {song.title}
                           </Text>
-                          <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60" numberOfLines={1}>
-                            {song.artistName || 'Sonic Atelier'}
-                          </Text>
+                          <View className="flex-row items-center">
+                            <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60" numberOfLines={1}>
+                              {song.artistName || 'Sonic Atelier'} • {song.plays || 0} plays
+                            </Text>
+                            {song.lyrics && (
+                              <View 
+                                style={{ 
+                                  backgroundColor: TOKENS.primary,
+                                  paddingHorizontal: 4,
+                                  paddingVertical: 1,
+                                  borderRadius: 4,
+                                  marginLeft: 8,
+                                }}
+                              >
+                                <AlignLeft 
+                                  size={10} 
+                                  color={TOKENS.surface} 
+                                  strokeWidth={3} 
+                                />
+                              </View>
+                            )}
+                          </View>
                        </View>
                        <TouchableOpacity 
                           onPress={() => addToQueue(song)}
@@ -283,7 +527,8 @@ export default function Library() {
                           <Music size={16} color={TOKENS.primary} />
                         </TouchableOpacity>
                     </TouchableOpacity>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -319,49 +564,17 @@ export default function Library() {
                       <Text style={{ color: TOKENS.primary, letterSpacing: 4 }} className="font-black uppercase text-[10px] mt-6">No albums found</Text>
                    </View>
                 ) : (
-                  albumZoomLevel === 2 ? (
-                    <View className="flex-row flex-wrap justify-between">
-                      {albums.map(album => (
-                        <TouchableOpacity 
-                          key={album.id} 
-                          className="w-[45%] mb-10"
-                          onPress={() => router.push({ pathname: '/playlist', params: { albumId: album.id, title: album.title, artist: album.artist, cover: album.cover }})}
-                        >
-                          <View style={{ backgroundColor: TOKENS.surfaceLow }} className="w-full aspect-square rounded-[36px] mb-4 overflow-hidden">
-                            <Image source={{ uri: resolveLocalPath(album.cover) || `https://api.dicebear.com/7.x/shapes/png?seed=${album.id}&backgroundColor=1c211d` }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
-                          </View>
-                          <Text style={{ color: TOKENS.onSurface }} className="font-black text-base tracking-tight" numberOfLines={1}>{album.title}</Text>
-                          <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60" numberOfLines={1}>{album.artist}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  ) : (
-                    <View className="space-y-4 pt-2">
-                      {albums.map(album => (
-                        <TouchableOpacity 
-                          key={album.id} 
-                          style={{ backgroundColor: TOKENS.surfaceLow }}
-                          className="flex-row items-center p-3 rounded-[32px] mb-4"
-                          onPress={() => router.push({ pathname: '/playlist', params: { albumId: album.id, title: album.title, artist: album.artist, cover: album.cover }})}
-                        >
-                          <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-20 h-20 rounded-[24px] mr-5 overflow-hidden">
-                            <Image source={{ uri: resolveLocalPath(album.cover) || `https://api.dicebear.com/7.x/shapes/png?seed=${album.id}&backgroundColor=1c211d` }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} />
-                          </View>
-                          <View className="flex-1 justify-center">
-                            <Text style={{ color: TOKENS.onSurface }} className="font-black text-lg tracking-tight mb-0.5" numberOfLines={1}>{album.title}</Text>
-                            <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-semibold opacity-60 mb-2" numberOfLines={1}>{album.artist}</Text>
-                            <View className="flex-row items-center">
-                              <Disc size={12} color={TOKENS.primary} opacity={0.8} />
-                              <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-widest ml-1.5 uppercase opacity-80">{album.count} Tracks</Text>
-                            </View>
-                          </View>
-                          <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="w-12 h-12 rounded-full items-center justify-center mr-2">
-                            <Play size={18} color={TOKENS.primary} fill={TOKENS.primary} />
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )
+                  <View className={albumZoomLevel === 2 ? "flex-row flex-wrap justify-between" : "space-y-2"}>
+                    {albums.map(album => (
+                      <AlbumItem 
+                        key={album.id}
+                        album={album}
+                        zoomLevel={albumZoomLevel}
+                        resolveLocalPath={resolveLocalPath}
+                        onPress={() => router.push({ pathname: '/playlist', params: { albumId: album.id, title: album.title, artist: album.artist, cover: album.cover }})}
+                      />
+                    ))}
+                  </View>
                 )}
               </View>
             </PinchGestureHandler>
@@ -421,7 +634,7 @@ export default function Library() {
                       <View className="flex-1">
                         <Text style={{ color: TOKENS.onSurface }} className="font-black text-lg tracking-tight mb-0.5">{playlist.title}</Text>
                         <Text style={{ color: TOKENS.primary }} className="text-[9px] font-black tracking-widest opacity-60">
-                           @{playlist.ownerUsername || 'curator'} • {playlist.songCount || 0} Tracks
+                           @{playlist.ownerUsername || 'curator'} • {playlist.songCount || 0} Tracks • {playlist.plays || 0} plays
                         </Text>
                       </View>
                       <TouchableOpacity 
@@ -438,6 +651,25 @@ export default function Library() {
           )}
         </ScrollView>
       </View>
+
+      {filter === 'songs' && sortMode === 'A-Z' && (
+        <View 
+          style={{ position: 'absolute', right: 6, top: 100, bottom: 80, width: 14, zIndex: 100 }}
+          className="justify-center items-center"
+        >
+          <View className="bg-white/5 py-4 rounded-full items-center w-full">
+            {alphabet.map(l => (
+              <TouchableOpacity 
+                key={l} 
+                onPress={() => scrollToLetter(l)}
+                className="h-5 w-full items-center justify-center"
+              >
+                <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[8px] font-black">{l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
 
       <EditMetadataModal 
         visible={editModalVisible}

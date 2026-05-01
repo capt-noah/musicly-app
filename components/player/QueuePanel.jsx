@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Animated, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { Music, X } from "lucide-react-native";
+import { Music, X, Plus } from "lucide-react-native";
 import { Image } from "expo-image";
+import AddSongsToQueueModal from "../AddSongsToQueueModal";
 import { TOKENS } from "./playerUtils";
 
 const QueuePanel = React.memo(({ 
@@ -18,8 +19,11 @@ const QueuePanel = React.memo(({
   coverUri,
   bottomOffset
 }) => {
+  const [addModalVisible, setAddModalVisible] = useState(false);
+
   return (
-    <Animated.View
+    <>
+      <Animated.View
       pointerEvents={queueMode ? "auto" : "none"}
       style={{
         position: "absolute",
@@ -99,7 +103,7 @@ const QueuePanel = React.memo(({
                       shadowRadius: 8, 
                       elevation: 4,
                     }}
-                    className="flex-row items-center px-4 py-2 rounded-[24px] mb-3"
+                    className="flex-row items-center px-4 py-2 rounded-full mb-3"
                   >
                     <View className="w-12 h-12 rounded-xl overflow-hidden mr-4 shadow-sm" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
                       <Image 
@@ -126,8 +130,32 @@ const QueuePanel = React.memo(({
             })
           )}
         </Animated.View>
+        
+        {/* Add Song Button */}
+        <Animated.View style={{ opacity: queuePanelOpacity }}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setAddModalVisible(true)}
+            style={{ 
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              borderColor: "rgba(255, 255, 255, 0.3)",
+              borderWidth: 1.5,
+              borderStyle: "dashed",
+            }}
+            className="flex-row items-center justify-center px-4 py-4 rounded-full mt-2 mb-8"
+          >
+            <Plus size={20} color="#ffffff" strokeWidth={2.5} style={{ marginRight: 8 }} />
+            <Text style={{ color: "#ffffff" }} className="font-bold text-[14px] tracking-wide">Add Song to Queue</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
     </Animated.View>
+
+    <AddSongsToQueueModal 
+      visible={addModalVisible} 
+      onClose={() => setAddModalVisible(false)} 
+    />
+    </>
   );
 });
 

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, Animated, PanResponder, Keyboard } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, Animated, PanResponder, Keyboard, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 
@@ -15,26 +15,35 @@ const TOKENS = {
   tertiary: '#fff8f2',
 };
 
-export default function SonicSheet({ visible, onClose, title, children, heightPercent = 0.75 }) {
+export default function SonicSheet({ 
+  visible, 
+  onClose, 
+  title, 
+  children, 
+  heightPercent = 0.75,
+  glossy = false,
+  onDragUpdate = null,
+  extraHeader = null,
+  externalPanY = null,
+  overlay = null
+}) {
   const [shouldRender, setShouldRender] = useState(visible);
-  const [intensity, setIntensity] = useState(0);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const localPanY = useRef(new Animated.Value(0)).current;
+  const panY = externalPanY || localPanY;
   const sheetHeight = SCREEN_HEIGHT * heightPercent;
 
-  // We need a listener because intensity prop of BlurView isn't natively animatable 
-  // when translateY uses native driver.
+  // Track dragging for external callbacks (like background blur)
   useEffect(() => {
-    const listenerId = translateY.addListener(({ value }) => {
-      // Map SCREEN_HEIGHT (0 intensity) to 0 (40 intensity)
-      const newIntensity = Math.max(0, Math.min(40, 40 * (1 - value / SCREEN_HEIGHT)));
-      setIntensity(newIntensity);
+    const listenerId = panY.addListener(({ value }) => {
+      onDragUpdate?.(value);
     });
-    return () => translateY.removeListener(listenerId);
-  }, [translateY]);
+    return () => panY.removeListener(listenerId);
+  }, [onDragUpdate, panY]);
 
-  // Interpolate background opacity based on translateY
-  const backgroundOpacity = translateY.interpolate({
-    inputRange: [0, SCREEN_HEIGHT],
+  // Interpolate background opacity based on gesture
+  const backgroundOpacity = panY.interpolate({
+    inputRange: [0, 300],
     outputRange: [1, 0],
     extrapolate: 'clamp'
   });
@@ -42,6 +51,8 @@ export default function SonicSheet({ visible, onClose, title, children, heightPe
   useEffect(() => {
     if (visible) {
       setShouldRender(true);
+      panY.setValue(0);
+      translateY.setValue(SCREEN_HEIGHT);
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
@@ -54,33 +65,28 @@ export default function SonicSheet({ visible, onClose, title, children, heightPe
         duration: 250,
         useNativeDriver: true
       }).start(({ finished }) => {
-        if (finished) {
-          setShouldRender(false);
-        }
+        if (finished) setShouldRender(false);
       });
     }
-  }, [visible, translateY]);
+  }, [visible]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only respond to downward swipes
-        return gestureState.dy > 10;
+        return Math.abs(gestureState.dy) > 5;
       },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(gestureState.dy);
-        }
-      },
+      onPanResponderMove: Animated.event([null, { dy: panY }], {
+        useNativeDriver: false,
+      }),
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 120 || gestureState.vy > 0.5) {
-          handleClose();
+          onClose();
         } else {
-          Animated.spring(translateY, {
+          Animated.spring(panY, {
             toValue: 0,
             useNativeDriver: true,
-            friction: 8
+            bounciness: 4,
           }).start();
         }
       }
@@ -92,22 +98,21 @@ export default function SonicSheet({ visible, onClose, title, children, heightPe
     onClose();
   };
 
-  // Only return null if not visible AND animation finished
   if (!shouldRender && !visible) return null;
 
   return (
     <Modal visible={shouldRender} transparent animationType="none" statusBarTranslucent>
       <View style={{ flex: 1 }}>
-        <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: backgroundOpacity }}>
-           <TouchableOpacity 
-              activeOpacity={1} 
-              onPress={handleClose} 
-              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-            >
-              <BlurView intensity={intensity} tint="dark" style={{ flex: 1 }} />
-            </TouchableOpacity>
+        {/* Backdrop */}
+        <Animated.View style={{ 
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+          opacity: backgroundOpacity,
+          backgroundColor: 'rgba(0,0,0,0.4)'
+        }}>
+          <TouchableOpacity activeOpacity={1} onPress={handleClose} style={{ flex: 1 }} />
         </Animated.View>
         
+        {/* Sheet Container */}
         <Animated.View 
           style={{ 
             position: 'absolute',
@@ -115,39 +120,74 @@ export default function SonicSheet({ visible, onClose, title, children, heightPe
             left: 0,
             right: 0,
             height: sheetHeight,
-            backgroundColor: '#171b17', 
-            borderTopLeftRadius: 36, 
-            borderTopRightRadius: 36,
-            borderWidth: 1,
-            borderColor: '#43494420',
+            backgroundColor: glossy ? 'rgba(0,0,0,0.2)' : '#171b17', 
+            borderTopLeftRadius: 40, 
+            borderTopRightRadius: 40,
+            overflow: 'hidden',
+            transform: [
+              { translateY: translateY },
+              { translateY: panY.interpolate({
+                  inputRange: [0, SCREEN_HEIGHT],
+                  outputRange: [0, SCREEN_HEIGHT],
+                  extrapolate: 'clamp'
+                }) 
+              }
+            ],
             shadowColor: '#000',
             shadowOffset: { width: 0, height: -10 },
             shadowOpacity: 0.5,
             shadowRadius: 20,
             elevation: 10,
-            transform: [{ translateY }]
           }}
         >
+          {glossy && (
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFillObject} />
+          )}
+          {glossy && (
+             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.15)', borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }]} />
+          )}
+
           <KeyboardAvoidingView 
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
             style={{ flex: 1 }}
           >
-            {/* Drag Handle */}
-            <View {...panResponder.panHandlers} className="w-full items-center py-4">
-               <View style={{ backgroundColor: TOKENS.onSurfaceVariant, opacity: 0.2 }} className="w-12 h-1 rounded-full" />
+            {/* Drag Handle Area */}
+            <View {...panResponder.panHandlers} style={{ width: '100%', alignItems: 'center', paddingVertical: glossy ? 24 : 18 }}>
+               <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', width: 48, height: 5, borderRadius: 10 }} />
             </View>
 
-            {/* Header */}
-            <View className="px-10 pb-4 flex-row justify-between items-center">
-              <View className="w-6" />
-              {title && (
-                <Text style={{ color: TOKENS.onSurface }} className="text-sm font-black uppercase tracking-[0.2em]">
-                  {title}
-                </Text>
-              )}
-              <TouchableOpacity onPress={handleClose}>
-                <X color={TOKENS.onSurfaceVariant} size={24} />
+            {/* Right Actions Area (Search + Close) */}
+            <View style={{ 
+              position: 'absolute', 
+              top: 14, 
+              right: 14, 
+              zIndex: 30, 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              gap: 8 
+            }}>
+              {extraHeader}
+              <TouchableOpacity 
+                onPress={handleClose} 
+                style={{ 
+                  padding: 8,
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  borderRadius: 20
+                }}
+              >
+                <X color={TOKENS.onSurfaceVariant} size={22} strokeWidth={2.5} />
               </TouchableOpacity>
+            </View>
+
+            {/* Header (Title Only) */}
+            <View style={{ paddingHorizontal: 40, paddingBottom: glossy ? 0 : 8, flexDirection: 'row', alignItems: 'center', zIndex: 10, minHeight: 40 }}>
+              {title && (
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ color: TOKENS.onSurface }} className="text-sm font-black uppercase tracking-[0.2em]">
+                    {title}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Content */}
@@ -156,10 +196,10 @@ export default function SonicSheet({ visible, onClose, title, children, heightPe
             </View>
           </KeyboardAvoidingView>
         </Animated.View>
+        
+        {/* Top-level Overlay (for popups like the Wrap Card) */}
+        {overlay}
       </View>
     </Modal>
   );
 }
-
-// Create an Animated version of BlurView
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);

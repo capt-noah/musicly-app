@@ -31,7 +31,7 @@ app.use(cors({
 app.use('/api', authRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/interactions', interactionsRoutes);
-app.use('/songs', songsRoutes);
+app.use('/music', songsRoutes);
 app.use('/api/playlists', playlistsRoutes);
 app.use('/api/player', playerRoutes);
 app.use('/', mediaRoutes);

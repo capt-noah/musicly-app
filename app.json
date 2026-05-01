@@ -11,10 +11,21 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.captnoah.Musicly",
+      "deploymentTarget": "16.2",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.captnoah.Musicly"
+        ]
+      },
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UISupportsDocumentBrowser": true,
+        "NSPhotoLibraryUsageDescription": "Musicly needs access to your photo library to save your Wrap card.",
+        "NSPhotoLibraryAddUsageDescription": "Musicly needs permission to save your Wrap card to your Photos."
       }
     },
     "android": {
@@ -22,7 +33,6 @@
         "backgroundColor": "#0E1410",
         "foregroundImage": "./assets/images/icon.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.captnoah.Musicly",
       "permissions": [
@@ -56,7 +66,31 @@
           "enableBackgroundPlayback": true
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "expo-widgets",
+        {
+          "enablePushNotifications": false,
+          "groupIdentifier": "group.com.captnoah.Musicly",
+          "bundleIdentifier": "com.captnoah.Musicly.widgets",
+          "widgets": [
+            {
+              "name": "SyncWidget",
+              "src": "./widgets/SyncWidget.jsx",
+              "displayName": "Sync Progress",
+              "description": "Track your music downloads",
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium"
+              ]
+            }
+          ]
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

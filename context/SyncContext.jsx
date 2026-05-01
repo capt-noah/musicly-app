@@ -10,6 +10,7 @@ import * as mm from 'music-metadata-browser';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
+import { LiveActivity } from 'expo-widgets';
 
 const SYNC_TASK_NAME = 'BACKGROUND_MUSIC_SYNC';
 
@@ -24,10 +25,28 @@ Notifications.setNotificationHandler({
 
 const SyncContext = createContext();
 
+// Define background task at the top level
+TaskManager.defineTask(SYNC_TASK_NAME, async () => {
+  try {
+    // In background task, we can't use hooks, so we need to trigger sync differently
+    // For now, we'll rely on the app being in a state where it can sync, 
+    // or we can implement a standalone sync function if needed.
+    console.log('[Background] Sync task triggered');
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (error) {
+    console.error('[Background] Sync task failed:', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+});
+
 const STORAGE_KEY = 'musicly_downloaded_songs';
-const MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
-const COVERS_DIR = `${FileSystem.documentDirectory}covers/`;
+const PENDING_PLAYS_KEY = 'musicly_pending_plays';
+const MUSIC_DIR = `${FileSystem.documentDirectory}Music/`;
+const LOCALS_DIR = `${MUSIC_DIR}Locals/`;
+const COVERS_DIR = `${FileSystem.documentDirectory}Artwork/`;
 const PROFILE_DIR = `${FileSystem.documentDirectory}profile/`;
+const OLD_MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
+const OLD_COVERS_DIR = `${FileSystem.documentDirectory}covers/`;
 const SYNC_CHANNEL_ID = 'sync-progress';
 
 export function SyncProvider({ children }) {
@@ -42,6 +61,7 @@ export function SyncProvider({ children }) {
   const [failedSongs, setFailedSongs] = useState({});
   const [localProfilePhoto, setLocalProfilePhoto] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [pendingPlays, setPendingPlays] = useState([]);
   const notificationIdRef = useRef(null);
   const syncingRef = useRef(false);
   const totalRef = useRef(0);
@@ -67,13 +87,35 @@ export function SyncProvider({ children }) {
   // Initialize storage, permissions and notifications
   useEffect(() => {
     async function init() {
-      // 1. Storage Directories
-      const musicInfo = await FileSystem.getInfoAsync(MUSIC_DIR);
-      if (!musicInfo.exists) await FileSystem.makeDirectoryAsync(MUSIC_DIR, { recursive: true });
-      const coversInfo = await FileSystem.getInfoAsync(COVERS_DIR);
-      if (!coversInfo.exists) await FileSystem.makeDirectoryAsync(COVERS_DIR, { recursive: true });
-      const profileInfo = await FileSystem.getInfoAsync(PROFILE_DIR);
-      if (!profileInfo.exists) await FileSystem.makeDirectoryAsync(PROFILE_DIR, { recursive: true });
+      // 1. Storage Directories & Migration
+      try {
+        // Migrate music folder
+        const oldMusicInfo = await FileSystem.getInfoAsync(OLD_MUSIC_DIR);
+        const newMusicInfo = await FileSystem.getInfoAsync(MUSIC_DIR);
+        if (oldMusicInfo.exists && !newMusicInfo.exists) {
+          await FileSystem.moveAsync({ from: OLD_MUSIC_DIR, to: MUSIC_DIR });
+        } else if (!newMusicInfo.exists) {
+          await FileSystem.makeDirectoryAsync(MUSIC_DIR, { recursive: true });
+        }
+
+        // Migrate covers folder
+        const oldCoversInfo = await FileSystem.getInfoAsync(OLD_COVERS_DIR);
+        const newCoversInfo = await FileSystem.getInfoAsync(COVERS_DIR);
+        if (oldCoversInfo.exists && !newCoversInfo.exists) {
+          await FileSystem.moveAsync({ from: OLD_COVERS_DIR, to: COVERS_DIR });
+        } else if (!newCoversInfo.exists) {
+          await FileSystem.makeDirectoryAsync(COVERS_DIR, { recursive: true });
+        }
+
+        const profileInfo = await FileSystem.getInfoAsync(PROFILE_DIR);
+        if (!profileInfo.exists) await FileSystem.makeDirectoryAsync(PROFILE_DIR, { recursive: true });
+
+        // Ensure Locals folder exists for manual sideloading
+        const localsInfo = await FileSystem.getInfoAsync(LOCALS_DIR);
+        if (!localsInfo.exists) await FileSystem.makeDirectoryAsync(LOCALS_DIR, { recursive: true });
+      } catch (e) {
+        console.warn('Directory init/migration failed:', e);
+      }
 
       // 2. Notification Permissions & Channel
       try {
@@ -98,7 +140,37 @@ export function SyncProvider({ children }) {
 
       // 3. Load State
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setDownloadedSongs(JSON.parse(stored));
+      let currentDownloads = {};
+      if (stored) {
+        currentDownloads = JSON.parse(stored);
+        
+        // Path Migration: Update internal paths if we moved folders
+        let stateNeedsUpdate = false;
+        const migratedDownloads = { ...currentDownloads };
+        
+        Object.keys(migratedDownloads).forEach(id => {
+          const song = migratedDownloads[id];
+          let updated = false;
+          if (song.localAudioUri && song.localAudioUri.toLowerCase().startsWith('music/')) {
+            song.localAudioUri = song.localAudioUri.replace(/music\//i, 'Music/');
+            updated = true;
+          }
+          if (song.localCoverUri && song.localCoverUri.toLowerCase().startsWith('covers/')) {
+            song.localCoverUri = song.localCoverUri.replace(/covers\//i, 'Artwork/');
+            updated = true;
+          }
+          if (updated) stateNeedsUpdate = true;
+        });
+
+        if (stateNeedsUpdate) {
+          console.log('[Migration] Updating paths in stored state');
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(migratedDownloads));
+          currentDownloads = migratedDownloads;
+        }
+        
+        setDownloadedSongs(currentDownloads);
+      }
+      
       const storedPlaylists = await AsyncStorage.getItem('musicly_playlists');
       if (storedPlaylists) setPlaylists(JSON.parse(storedPlaylists));
       const storedProfilePhoto = await AsyncStorage.getItem('musicly_profile_photo');
@@ -106,14 +178,98 @@ export function SyncProvider({ children }) {
       const storedFailed = await AsyncStorage.getItem('musicly_failed_songs');
       if (storedFailed) setFailedSongs(JSON.parse(storedFailed));
 
+      const storedPendingPlays = await AsyncStorage.getItem(PENDING_PLAYS_KEY);
+      if (storedPendingPlays) setPendingPlays(JSON.parse(storedPendingPlays));
+
       if (sessionId) {
         await syncLikes();
       }
 
+      // 4. Scan for local files added manually
+      await scanLocalFiles(currentDownloads);
+
       setIsInitialized(true);
     }
     init();
-  }, [sessionId]);
+  }, [sessionId, scanLocalFiles]);
+
+
+  const scanLocalFiles = useCallback(async (currentDownloads) => {
+    try {
+      // Create Locals directory if it somehow doesn't exist
+      const localsInfo = await FileSystem.getInfoAsync(LOCALS_DIR);
+      if (!localsInfo.exists) {
+        await FileSystem.makeDirectoryAsync(LOCALS_DIR, { recursive: true });
+      }
+
+      const files = await FileSystem.readDirectoryAsync(LOCALS_DIR);
+      const audioFiles = files.filter(f => f.toLowerCase().endsWith('.mp3') || f.toLowerCase().endsWith('.m4a'));
+      
+      let updated = false;
+      const newDownloads = { ...currentDownloads };
+
+      for (const filename of audioFiles) {
+        // Now that it's in a separate folder, we only check if it's already in our state
+        const relPath = `Music/Locals/${filename}`;
+        const isTracked = Object.values(newDownloads).some(s => s.localAudioUri === relPath);
+
+        if (!isTracked) {
+          console.log(`[Scanner] Found new sideloaded file: ${filename}`);
+          const fullPath = `${LOCALS_DIR}${filename}`;
+          
+          try {
+            const encodedPath = fullPath.replace(/ /g, '%20');
+            const response = await fetch(encodedPath);
+            const blob = await response.blob();
+            const metadata = await mm.parseBlob(blob);
+            
+            const rawLyrics = metadata.common.lyrics;
+            const lyrics = rawLyrics && rawLyrics.length > 0 ? (typeof rawLyrics[0] === 'string' ? rawLyrics[0] : rawLyrics[0].text) : null;
+            
+            // Extract cover art if available
+            let localCoverUri = null;
+            if (metadata.common.picture && metadata.common.picture.length > 0) {
+              try {
+                const pic = metadata.common.picture[0];
+                const coverFilename = `local_${filename.replace(/\.[^/.]+$/, "").replace(/\s+/g, "_")}.jpg`;
+                const coverPath = `${COVERS_DIR}${coverFilename}`;
+                
+                const base64Data = Buffer.from(pic.data).toString('base64');
+                await FileSystem.writeAsStringAsync(coverPath, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+                localCoverUri = `Artwork/${coverFilename}`;
+              } catch (picErr) {
+                console.warn(`[Scanner] Cover extraction failed for ${filename}:`, picErr);
+              }
+            }
+
+            const songId = `local_${filename.replace(/\.[^/.]+$/, "").replace(/\s+/g, "_")}`;
+            newDownloads[songId] = {
+              id: songId,
+              title: metadata.common.title || filename.replace(/\.[^/.]+$/, ""),
+              artistName: metadata.common.artist || 'Local Artist',
+              albumTitle: metadata.common.album || 'Local Files',
+              localAudioUri: relPath,
+              localCoverUri: localCoverUri,
+              isLocalOnly: true,
+              syncedAt: new Date().toISOString(),
+              duration: metadata.format.duration || 0,
+              lyrics: lyrics || null,
+            };
+            updated = true;
+          } catch (err) {
+            console.warn(`[Scanner] Metadata extraction failed for ${filename}:`, err);
+          }
+        }
+      }
+
+      if (updated) {
+        setDownloadedSongs(newDownloads);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newDownloads));
+      }
+    } catch (e) {
+      console.warn('[Scanner] Local scan failed:', e);
+    }
+  }, []);
 
   const updateFileProgress = (fileId, progressValue) => {
     const now = Date.now();
@@ -134,10 +290,11 @@ export function SyncProvider({ children }) {
     }
   };
 
+  const liveActivityRef = useRef(null);
+
   const updateSyncNotification = async (current, total, successCount = 0, failCount = 0) => {
     try {
       const isFinished = current >= total && total > 0;
-      
       const progressInt = Math.floor(current);
       
       let title = 'Musicly Sync';
@@ -148,8 +305,35 @@ export function SyncProvider({ children }) {
         body = failCount > 0 
           ? `Synced ${successCount} tracks, ${failCount} failed.` 
           : `Successfully synced ${total} tracks.`;
+        
+        // End Live Activity if it exists
+        if (liveActivityRef.current) {
+          await liveActivityRef.current.end();
+          liveActivityRef.current = null;
+        }
       } else {
         body = `Processing track ${progressInt + 1} of ${total}`;
+        
+        // Handle Live Activity for Dynamic Island
+        if (Platform.OS === 'ios') {
+          try {
+            if (!liveActivityRef.current && total > 0) {
+              liveActivityRef.current = await LiveActivity.start('sync-progress', {
+                progress: progressInt,
+                total: total,
+                title: 'Syncing Music...'
+              });
+            } else if (liveActivityRef.current) {
+              await liveActivityRef.current.update({
+                progress: progressInt,
+                total: total,
+                title: 'Syncing Music...'
+              });
+            }
+          } catch (err) {
+            console.warn('Live Activity failed:', err);
+          }
+        }
       }
 
       await Notifications.scheduleNotificationAsync({
@@ -158,8 +342,18 @@ export function SyncProvider({ children }) {
           title,
           body,
           sticky: !isFinished,
-          priority: Notifications.AndroidNotificationPriority.LOW,
-          sound: false,
+          priority: isFinished 
+            ? Notifications.AndroidNotificationPriority.HIGH 
+            : Notifications.AndroidNotificationPriority.LOW,
+          sound: isFinished,
+          vibrate: isFinished ? [0, 250, 250, 250] : null,
+          android: {
+            channelId: SYNC_CHANNEL_ID,
+            ongoing: !isFinished,
+          },
+          ios: {
+            interruptionLevel: isFinished ? 'active' : 'passive',
+          }
         },
         trigger: null,
       });
@@ -186,12 +380,14 @@ export function SyncProvider({ children }) {
       const realAlbum = metadata.common.album;
       const realArtist = metadata.common.artist;
       const realTitle = metadata.common.title;
+      const rawLyrics = metadata.common.lyrics;
+      const lyrics = rawLyrics && rawLyrics.length > 0 ? rawLyrics[0] : null;
 
 
       // Report real metadata back to server so grouping is accurate
       let updatedMetadata = null;
       try {
-        const syncRes = await fetch(`${BASE_URL}/songs/${song.id}/metadata`, {
+        const syncRes = await fetch(`${BASE_URL}/music/${song.id}/metadata`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -224,13 +420,13 @@ export function SyncProvider({ children }) {
         coverUri = absoluteCoverUri.split('/Documents/')[1] || absoluteCoverUri;
       }
       
-      return { coverUri, updatedMetadata };
+      return { coverUri, updatedMetadata, lyrics };
     } catch (err) {
-      return { coverUri: null, updatedMetadata: null };
+      return { coverUri: null, updatedMetadata: null, lyrics: null };
     }
   };
 
-  const downloadFile = async (fileIdOrUrl, type = 'audio') => {
+  const downloadFile = async (fileIdOrUrl, type = 'audio', filenameHint = null) => {
     if (!sessionId) return { uri: null, error: 'No session' };
     try {
       let url = null;
@@ -248,7 +444,7 @@ export function SyncProvider({ children }) {
         url = fileIdOrUrl.startsWith('/') ? `${BASE_URL}${fileIdOrUrl}` : fileIdOrUrl;
         targetFileId = 'user_avatar';
       } else {
-        const endpoint = `${BASE_URL}/songs/file/${fileIdOrUrl}`;
+        const endpoint = `${BASE_URL}/music/file/${fileIdOrUrl}`;
         const response = await fetch(endpoint, {
           headers: { 'Authorization': `Bearer ${sessionId}` }
         });
@@ -264,7 +460,17 @@ export function SyncProvider({ children }) {
 
       const extension = type === 'audio' ? 'mp3' : 'jpg';
       const folder = type === 'audio' ? MUSIC_DIR : (type === 'profile' ? PROFILE_DIR : COVERS_DIR);
-      const fileUri = `${folder}${targetFileId}.${extension}`;
+      
+      let finalFilename = `${targetFileId}.${extension}`;
+      if (filenameHint && type === 'audio') {
+        // Sanitize filename: remove characters that are invalid in filesystems (including Windows/Linux/Mac)
+        const sanitized = filenameHint.replace(/[<>:"/\\|?*#%]/g, '').trim();
+        if (sanitized) {
+          finalFilename = `${sanitized}.${extension}`;
+        }
+      }
+      
+      const fileUri = `${folder}${finalFilename}`;
 
       const callback = downloadProgress => {
         if (!downloadProgress || !downloadProgress.totalBytesExpectedToWrite) return;
@@ -327,7 +533,7 @@ setLikedSongs(prev => {
 });
 
 try {
-  const response = await fetch(`${BASE_URL}/songs/${songId}/like`, {
+  const response = await fetch(`${BASE_URL}/music/${songId}/like`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${sessionId}`,
@@ -351,7 +557,7 @@ try {
 const syncLikes = useCallback(async () => {
 if (!sessionId) return;
 try {
-  const response = await fetch(`${BASE_URL}/songs/likes`, {
+  const response = await fetch(`${BASE_URL}/music/likes`, {
     headers: {
       'Authorization': `Bearer ${sessionId}`,
     }
@@ -418,16 +624,92 @@ try {
     } catch (err) { throw err; }
   }, [sessionId, API_URL, downloadFile]);
 
+  const syncPendingPlays = useCallback(async (playsToSync) => {
+    if (!sessionId || playsToSync.length === 0) return;
+    console.log(`[Sync] Attempting to sync ${playsToSync.length} pending plays...`);
+    try {
+      const response = await fetch(`${BASE_URL}/music/plays/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionId}`
+        },
+        body: JSON.stringify({ plays: playsToSync })
+      });
+      if (response.ok) {
+        console.log('[Sync] Successfully synced pending plays to server.');
+        setPendingPlays([]);
+        await AsyncStorage.removeItem(PENDING_PLAYS_KEY);
+      } else {
+        console.warn('[Sync] Failed to sync plays. Server responded with status:', response.status);
+      }
+    } catch (e) {
+      console.error('[Sync] Network error during plays sync:', e);
+    }
+  }, [sessionId, BASE_URL]);
+
+  const recordPlay = useCallback(async (songId) => {
+    // 1. Optimistic update in downloadedSongs
+    setDownloadedSongs(prev => {
+      const song = prev[songId];
+      if (!song) return prev;
+      return {
+        ...prev,
+        [songId]: { ...song, plays: (song.plays || 0) + 1 }
+      };
+    });
+
+    // 2. Add to pending plays
+    const newPlay = { songId, playedAt: new Date().toISOString() };
+    const updatedPending = [...pendingPlays, newPlay];
+    setPendingPlays(updatedPending);
+    await AsyncStorage.setItem(PENDING_PLAYS_KEY, JSON.stringify(updatedPending));
+
+    // 3. Try immediate sync
+    if (sessionId) {
+      console.log(`[Sync] Attempting immediate server record for play: ${songId}`);
+      try {
+        const response = await fetch(`${BASE_URL}/music/${songId}/play`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${sessionId}` }
+        });
+        if (response.ok) {
+          console.log(`[Sync] Server confirmed play for ${songId}`);
+          // If successful, remove this specific play from pending
+          const filtered = updatedPending.filter(p => p !== newPlay);
+          setPendingPlays(filtered);
+          await AsyncStorage.setItem(PENDING_PLAYS_KEY, JSON.stringify(filtered));
+        } else {
+          console.warn(`[Sync] Server rejected play recording (Status: ${response.status}). Keep in pending.`);
+        }
+      } catch (e) {
+        console.log('[Sync] Offline or server unreachable. Play saved locally for later sync.');
+      }
+    } else {
+      console.log('[Sync] No session active. Play saved locally for later sync.');
+    }
+  }, [pendingPlays, sessionId, BASE_URL]);
+
   const syncMusic = useCallback(async (isBackground = false) => {
     if (!sessionId || syncing) return;
+    
+    // Sync plays first
+    if (pendingPlays.length > 0) {
+      await syncPendingPlays(pendingPlays);
+    }
+
     setSyncing(true);
-    const pendingEndpoint = `${BASE_URL}/songs/sync/pending`;
+    const pendingEndpoint = `${BASE_URL}/music/sync/pending`;
 
     try {
       const response = await fetch(pendingEndpoint, {
         headers: { 'Authorization': `Bearer ${sessionId}` }
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        setSyncing(false);
+        syncingRef.current = false;
+        return;
+      }
 
       const pendingSongs = await response.json();
       
@@ -502,7 +784,8 @@ try {
           let attempts = 0;
           while (!audioUri && attempts < 3) {
             attempts++;
-            const res = await downloadFile(song.audioFileId, 'audio');
+            const filenameHint = `${song.artistName || 'Unknown'} - ${song.title || 'Untitled'}`;
+            const res = await downloadFile(song.audioFileId, 'audio', filenameHint);
             audioUri = res.uri;
             lastError = res.error;
             if (!audioUri && attempts < 3) await new Promise(r => setTimeout(r, 1000));
@@ -510,7 +793,7 @@ try {
 
           if (audioUri) {
             const absoluteAudioPath = resolveLocalPath(audioUri);
-            const { coverUri, updatedMetadata } = await extractCoverArt(absoluteAudioPath, song);
+            const { coverUri, updatedMetadata, lyrics } = await extractCoverArt(absoluteAudioPath, song);
             let finalCoverUri = coverUri;
             
             // If no embedded cover, or if we explicitly need a cover update from server
@@ -525,7 +808,8 @@ try {
               localAudioUri: audioUri, 
               localCoverUri: finalCoverUri, 
               syncedAt: new Date().toISOString(),
-              coverFileId: song.coverFileId // Store this to detect future changes
+              coverFileId: song.coverFileId, // Store this to detect future changes
+              lyrics: lyrics || null
             };
             updated = true;
             successCountRef.current++;
@@ -566,13 +850,13 @@ try {
           }
         } else {
           // Song exists, just check for metadata updates silently
-          if (existing && (
-            existing.artistName !== song.artistName || 
-            existing.title !== song.title ||
-            existing.albumTitle !== song.albumTitle
-          )) {
-            newDownloads[song.id] = { ...existing, ...song };
-            updated = true;
+          if (existing) {
+            const merged = { ...existing, ...song };
+            // Stringify comparison ensures ANY new field from the server (like 'plays') updates the cache
+            if (JSON.stringify(existing) !== JSON.stringify(merged)) {
+              newDownloads[song.id] = merged;
+              updated = true;
+            }
           }
         }
         
@@ -601,7 +885,7 @@ try {
     try {
       if (sessionId && API_URL) {
         const baseApiUrl = API_URL.replace(/\/api$/, '');
-        await fetch(`${baseApiUrl}/songs/${songId}`, {
+        await fetch(`${baseApiUrl}/music/${songId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${sessionId}` }
         });
@@ -648,17 +932,6 @@ try {
     }
   }, [sessionId, isInitialized, user?.profilePhoto]);
 
-  // Define background task
-  useEffect(() => {
-    TaskManager.defineTask(SYNC_TASK_NAME, async () => {
-      try {
-        await syncMusic(true);
-        return BackgroundTask.BackgroundTaskResult.Success;
-      } catch (error) {
-        return BackgroundTask.BackgroundTaskResult.Failed;
-      }
-    });
-  }, [syncMusic]);
 
   const updateSongMetadataLocally = useCallback(async (songId, metadata) => {
     setDownloadedSongs(prev => {
@@ -678,7 +951,8 @@ try {
       likedSongs, toggleLike, syncLikes,
       failedSongs, deleteFailedSong, retryFailedSync,
       syncProfilePhoto, uploadProfilePhoto,
-      API_URL, updateSongMetadataLocally
+      API_URL, updateSongMetadataLocally,
+      recordPlay, pendingPlays
     }}>
       {children}
     </SyncContext.Provider>

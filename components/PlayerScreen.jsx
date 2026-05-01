@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ImageColors from "react-native-image-colors";
+import { BlurView } from "expo-blur";
 
 // Sub-components
 import PlayerBackground from "./player/PlayerBackground";
@@ -26,6 +27,7 @@ import MiniPlayer from "./MiniPlayer";
 // Context & Utils
 import { useSync } from "../context/SyncContext";
 import { usePlayer } from "../context/PlayerContext";
+import { useAuth } from "../context/AuthContext";
 import { 
   TOKENS, 
   SCREEN_HEIGHT, 
@@ -73,15 +75,29 @@ const PlayerScreen = ({ onCollapse }) => {
   const [lastTrackId, setLastTrackId] = useState(currentTrack?.id);
   const [scrubPosition, setScrubPosition] = useState(null);
   
-  const uiOpacity = useRef(new Animated.Value(1)).current;
+  const blurOpacity = useRef(new Animated.Value(0)).current;
+  const lyricsDragValue = useRef(new Animated.Value(0)).current;
+
+  // Pure native derivation of blur: fully blurred when sheet is open, 
+  // but unblurs natively as the user swipes down.
+  const combinedBlurOpacity = Animated.multiply(
+    blurOpacity, 
+    lyricsDragValue.interpolate({
+      inputRange: [0, SCREEN_HEIGHT * 0.4],
+      outputRange: [1, 0],
+      extrapolate: 'clamp'
+    })
+  );
 
   useEffect(() => {
-    Animated.timing(uiOpacity, {
-      toValue: lyricsOpen ? 0 : 1,
+    Animated.timing(blurOpacity, {
+      toValue: lyricsOpen ? 1 : 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
   }, [lyricsOpen]);
+
+
 
   // Layout Refs & State
   const [artworkLayout, setArtworkLayout] = useState(null);
@@ -112,20 +128,25 @@ const PlayerScreen = ({ onCollapse }) => {
   const repeatModeRef = useRef('OFF');
   const handleNextRef = useRef(null);
   const handlePrevRef = useRef(null);
+  const toggleQueueModeRef = useRef(null);
 
   const duration = playbackStatus?.duration || 0;
   const position = playbackStatus?.currentTime || 0;
   const progress = duration > 0 ? (position / duration) * 100 : 0;
 
+  const lyricsOpenRef = useRef(false);
+  
   // Sync Refs
   useEffect(() => {
     durationRef.current = duration;
     seekToRef.current = seekTo;
     queueModeRef.current = queueMode;
+    lyricsOpenRef.current = lyricsOpen;
     queueRef.current = queue;
     repeatModeRef.current = repeatMode;
     currentQueueIndexRef.current = Math.max(queue.findIndex((t) => t.id === currentTrack?.id), 0);
-  }, [duration, seekTo, queueMode, queue, repeatMode, currentTrack?.id]);
+    toggleQueueModeRef.current = toggleQueueMode;
+  }, [duration, seekTo, queueMode, lyricsOpen, queue, repeatMode, currentTrack?.id, toggleQueueMode]);
 
   const rawCover = currentTrack?.localCoverUri || currentTrack?.coverUrl;
   const coverUri = resolveLocalPath(rawCover) || "https://picsum.photos/seed/musicly-cover/600/600";
@@ -356,6 +377,38 @@ const PlayerScreen = ({ onCollapse }) => {
     handlePrevRef.current = handlePrev;
   }, [handleNext, handlePrev]);
 
+  const globalSwipePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, state) => {
+        // If lyrics are open, SonicSheet handles its own gestures
+        if (lyricsOpenRef.current) return false;
+        
+        // Detect UP (Lyrics/Close Queue) or DOWN (Open Queue)
+        const isVertical = Math.abs(state.dy) > Math.abs(state.dx) * 2;
+        const isUp = state.dy < -40;
+        const isDown = state.dy > 40;
+        
+        return isVertical && (isUp || isDown);
+      },
+      onPanResponderRelease: (_, state) => {
+        if (state.dy < -100 || state.vy < -0.5) {
+          // Swipe UP
+          if (queueModeRef.current) {
+            toggleQueueModeRef.current?.();
+          } else {
+            setLyricsOpen(true);
+          }
+        } else if (state.dy > 100 || state.vy > 0.5) {
+          // Swipe DOWN
+          if (!queueModeRef.current) {
+            toggleQueueModeRef.current?.();
+          }
+        }
+      },
+    })
+  ).current;
+
   const coverArtPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -429,6 +482,27 @@ const PlayerScreen = ({ onCollapse }) => {
       },
       onPanResponderTerminate: () => {
         Animated.spring(coverSwipeAnim, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
+  // Left-edge swipe right → collapse player (iOS-style back gesture)
+  const swipeClosePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (e) => e.nativeEvent.locationX < 40,
+      onMoveShouldSetPanResponder: (e, state) => {
+        if (lyricsOpenRef.current || queueModeRef.current) return false;
+        // Must be mostly horizontal and moving right
+        return (
+          e.nativeEvent.locationX < 60 &&
+          state.dx > 10 &&
+          Math.abs(state.dx) > Math.abs(state.dy) * 1.5
+        );
+      },
+      onPanResponderRelease: (_, state) => {
+        if (state.dx > 60 || state.vx > 0.4) {
+          onCollapse?.();
+        }
       },
     })
   ).current;
@@ -510,16 +584,32 @@ const PlayerScreen = ({ onCollapse }) => {
   if (!currentTrack) return null;
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: '#000' }} {...globalSwipePanResponder.panHandlers}>
+      {/* Left-edge swipe zone to close player */}
+      <View
+        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 40, zIndex: 50 }}
+        {...swipeClosePanResponder.panHandlers}
+      />
       <PlayerBackground 
         currentColors={currentColors} 
         nextColors={nextColors} 
         ambianceFade={ambianceFade} 
       />
-      
+
+      {/* Dynamic blur overlay — blurs the player content when lyrics sheet is open */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          opacity: combinedBlurOpacity,
+          zIndex: 5,
+        }}
+      >
+        <BlurView intensity={100} tint="dark" style={{ flex: 1 }} />
+      </Animated.View>
+
       <SafeAreaView style={{ flex: 1, zIndex: 10 }}>
-        <Animated.View style={{ flex: 1, opacity: uiOpacity }} pointerEvents={lyricsOpen ? 'none' : 'auto'}>
-          <View className="flex-1 px-8 pt-4 pb-12 relative" style={{ zIndex: 10 }}>
+        <View className="flex-1 px-8 pt-4 pb-12 relative" style={{ zIndex: 10 }}>
           
           <QueuePanel 
             queueMode={queueMode}
@@ -592,15 +682,19 @@ const PlayerScreen = ({ onCollapse }) => {
             />
           </View>
         </View>
-        </Animated.View>
       </SafeAreaView>
 
-      <LyricsSheet visible={lyricsOpen} onClose={() => setLyricsOpen(false)} />
-    </>
+      <LyricsSheet 
+        visible={lyricsOpen} 
+        onClose={() => setLyricsOpen(false)}
+        externalPanY={lyricsDragValue}
+      />
+    </View>
   );
 };
 
 const Player = () => {
+  const { isAuthenticated } = useAuth();
   const { currentTrack, isExpanded, expandPlayer, collapsePlayer } = usePlayer();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
@@ -622,7 +716,7 @@ const Player = () => {
     }
   }, [isExpanded]);
 
-  if (!currentTrack) return null;
+  if (!isAuthenticated || !currentTrack) return null;
 
   return (
     <>

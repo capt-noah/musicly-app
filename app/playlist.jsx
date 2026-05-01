@@ -87,6 +87,7 @@ export default function PlaylistDetail() {
         currentTrack={currentTrack}
         isPlaying={isPlaying}
         router={router}
+        handleShufflePlay={handleShufflePlay}
       />
     );
   }
@@ -106,10 +107,11 @@ export default function PlaylistDetail() {
   };
 
   const handleShufflePlay = () => {
-    if (playlistSongs.length > 0) {
+    const tracksToPlay = isAlbumMode ? albumPlaylistData.tracks : playlistSongs;
+    if (tracksToPlay && tracksToPlay.length > 0) {
       if (!shuffleMode) toggleShuffleMode();
-      const randomIndex = Math.floor(Math.random() * playlistSongs.length);
-      playTrack(playlistSongs[randomIndex], playlistSongs);
+      const randomIndex = Math.floor(Math.random() * tracksToPlay.length);
+      playTrack(tracksToPlay[randomIndex], tracksToPlay);
     }
   };
 

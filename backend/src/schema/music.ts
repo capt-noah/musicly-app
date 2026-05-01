@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, index, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, index, primaryKey, serial } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { albums } from "./albums";
 import { artists } from "./artists";
@@ -13,6 +13,7 @@ export const music = pgTable("music", {
   durationSec: integer("duration_sec").notNull(),
   mimeType: text("mime_type"),
   fileSize: integer("file_size").notNull(),
+  plays: integer("plays").default(0),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow(),
 }, (table) => {
   return {
@@ -28,4 +29,11 @@ export const musicArtists = pgTable("music_artists", {
   return {
     pk: primaryKey({ columns: [table.musicId, table.artistId] }),
   };
+});
+
+export const playHistory = pgTable("play_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  songId: uuid("song_id").references(() => music.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  playedAt: timestamp("played_at").defaultNow(),
 });

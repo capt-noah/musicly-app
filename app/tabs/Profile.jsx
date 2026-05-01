@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useSync } from '../../context/SyncContext';
 import ConnectTelegramModal from '../../components/ConnectTelegramModal';
+import WrapSheet from '../../components/WrapSheet';
 
 // Sonic Atelier Design Tokens
 const TOKENS = {
@@ -22,11 +23,13 @@ const TOKENS = {
 
 export default function Profile() {
   const { user, logout, API_URL, BASE_URL, sessionId, refreshUser } = useAuth();
-  const { syncing, syncMusic, localProfilePhoto, resolveLocalPath, syncProfilePhoto } = useSync();
+  const { downloadedSongs, syncing, syncMusic, localProfilePhoto, resolveLocalPath, syncProfilePhoto } = useSync();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [wrapVisible, setWrapVisible] = useState(false);
+  const [wrapRange, setWrapRange] = useState('Weekly'); // 'Daily' | 'Weekly' | 'Monthly'
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
@@ -83,6 +86,12 @@ export default function Profile() {
     }
   };
 
+  // Pre-calculate profile stats
+  const songsArr = Object.values(downloadedSongs);
+  const totalPlays = songsArr.reduce((acc, s) => acc + (s.plays || 0), 0);
+  const totalMinutes = Math.floor(songsArr.reduce((acc, s) => acc + (s.plays || 0) * (s.duration || s.durationSec || 180), 0) / 60);
+  const topTrack = songsArr.length > 0 ? [...songsArr].sort((a, b) => (b.plays || 0) - (a.plays || 0))[0] : null;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: TOKENS.surface }}>
       <View className="px-8">
@@ -130,6 +139,59 @@ export default function Profile() {
            <View style={{ backgroundColor: TOKENS.primary + '15' }} className="px-5 py-1.5 rounded-full mt-4">
               <Text style={{ color: TOKENS.primary }} className="text-[10px] font-black tracking-[0.2em]">@{user?.username || 'curator'}</Text>
            </View>
+        </View>
+
+        {/* Musicly Wrap Section */}
+        <View className="mb-12">
+          <View className="flex-row items-center justify-between mb-6">
+            <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-black uppercase tracking-[0.25rem] opacity-60">Musicly Wrap</Text>
+            <TouchableOpacity onPress={() => setWrapVisible(true)}>
+               <Text style={{ color: TOKENS.primary }} className="text-[9px] font-black uppercase tracking-widest opacity-80">View Details</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity 
+            onPress={() => setWrapVisible(true)}
+            activeOpacity={0.9}
+            style={{ backgroundColor: TOKENS.surfaceLow }} 
+            className="p-8 rounded-[48px] overflow-hidden"
+          >
+             <View className="mb-8 flex-row justify-between items-end">
+                 <View>
+                   <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">Total Plays</Text>
+                   <Text style={{ color: TOKENS.tertiary }} className="text-3xl font-black">
+                     {totalPlays} <Text className="text-xs">PLAYS</Text>
+                   </Text>
+                 </View>
+                 <View className="items-end">
+                   <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">Total Time</Text>
+                   <Text style={{ color: TOKENS.tertiary }} className="text-3xl font-black">
+                     {totalMinutes} <Text className="text-xs">MINS</Text>
+                   </Text>
+                 </View>
+             </View>
+
+             <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="p-6 rounded-[32px] flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-16 h-16 rounded-2xl bg-black mr-5 overflow-hidden">
+                     <Image 
+                       source={{ uri: topTrack ? resolveLocalPath(topTrack.localCoverUri) : null }} 
+                       style={{ width: '100%', height: '100%' }}
+                     />
+                  </View>
+                  <View className="flex-1 mr-2">
+                     <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">Top Track</Text>
+                     <Text style={{ color: TOKENS.onSurface }} className="text-lg font-black tracking-tight" numberOfLines={1}>
+                       {topTrack?.title || "Nothing yet"}
+                     </Text>
+                     <Text style={{ color: TOKENS.primary }} className="text-[10px] font-bold uppercase tracking-widest opacity-60 mt-0.5" numberOfLines={1}>
+                       {topTrack?.artistName || "Sonic Atelier"} • {topTrack?.plays || 0} Plays
+                     </Text>
+                  </View>
+                </View>
+                <ChevronRight size={16} color={TOKENS.onSurfaceVariant} opacity={0.3} />
+             </View>
+          </TouchableOpacity>
         </View>
 
         <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-black uppercase tracking-[0.25rem] mb-6 opacity-60">Accounts</Text>
@@ -181,6 +243,13 @@ export default function Profile() {
       <ConnectTelegramModal 
         visible={modalVisible} 
         onClose={() => setModalVisible(false)} 
+      />
+
+      <WrapSheet 
+        visible={wrapVisible}
+        onClose={() => setWrapVisible(false)}
+        downloadedSongs={downloadedSongs}
+        resolveLocalPath={resolveLocalPath}
       />
     </SafeAreaView>
   );

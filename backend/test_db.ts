@@ -1,0 +1,1 @@
+import { db } from "./src/db"; import { music } from "./src/schema"; async function check() { const songs = await db.select().from(music); console.log(songs.map(s => ({ id: s.id, plays: s.plays }))); process.exit(0); } check();

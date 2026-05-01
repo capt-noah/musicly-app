@@ -34,7 +34,7 @@ const TrackInfo = React.memo(({
         boundary and never bleeds over the right-side buttons.
         The inner Animated.View slides purely on the GPU via translateX.
       */}
-      <View style={{ flex: 1, overflow: 'hidden', paddingRight: 12 }}>
+      <View style={{ flex: 1, overflow: "hidden", marginRight: 10 }}>
         <Animated.View style={{
           width: '100%',
           transform: [{
@@ -46,9 +46,10 @@ const TrackInfo = React.memo(({
           }]
         }}>
           <Text 
-            style={{ color: TOKENS.tertiary, letterSpacing: -1, fontSize: 24 }} 
+            style={{ color: TOKENS.tertiary, letterSpacing: -1, fontSize: 21 }} 
             className="font-black mb-1" 
             numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {currentTrack.title}
           </Text>

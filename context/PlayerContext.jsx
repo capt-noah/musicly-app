@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { createAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { useSync } from './SyncContext';
 import { useAuth } from './AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,7 +8,7 @@ const PlayerContext = createContext();
 const STATE_STORAGE_KEY = 'musicly_player_state';
 
 export function PlayerProvider({ children }) {
-  const { downloadedSongs, resolveLocalPath } = useSync();
+  const { downloadedSongs, resolveLocalPath, recordPlay } = useSync();
   const { API_URL, sessionId } = useAuth();
   const [currentTrack, setCurrentTrack] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -29,35 +29,47 @@ export function PlayerProvider({ children }) {
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { shuffleModeRef.current = shuffleMode; }, [shuffleMode]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  const isRestoredRef = useRef(false);
+
+  // Plays Tracking
+  const listeningTimeRef = useRef(0);
+  const playRecordedRef = useRef(false);
+  const lastUpdateTimeRef = useRef(Date.now());
+
 
   // Configure Audio Mode for Background Playback
   useEffect(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      staysActiveInBackground: true,
-      interruptionMode: 'doNotMix',
-      allowsRecording: false,
-    }).catch(err => console.warn('Audio mode config failed:', err));
+    const initAudio = async () => {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          staysActiveInBackground: true,
+          interruptionMode: 'doNotMix',
+          allowsRecording: false,
+          playThroughEarpieceAndroid: false,
+        });
+        console.log('Audio mode initialized for background playback');
+      } catch (err) {
+        console.warn('Audio mode config failed:', err);
+      }
+    };
+    initAudio();
   }, []);
 
   const expandPlayer = () => setIsExpanded(true);
   const collapsePlayer = () => setIsExpanded(false);
 
-  const player = useMemo(() => {
-    const p = createAudioPlayer('');
-    // expo-audio uses .metadata for lock screen info
-    p.showNowPlayingControls = true;
-    return p;
-  }, []);
-
-  // Cleanup player on unmount to prevent "JS runtime lost" errors
-  useEffect(() => {
-    return () => {
-      player.pause();
-    };
-  }, [player]);
+  const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
+
+  useEffect(() => {
+    if (player) {
+      player.timeUpdateInterval = 0.05; // 50ms updates for hyper-accurate lyrics
+    }
+  }, [player]);
+
+
 
   // Persistence: restore last state on mount
   useEffect(() => {
@@ -75,7 +87,18 @@ export function PlayerProvider({ children }) {
           if (track) {
             setCurrentTrack(track);
             const uri = resolveLocalPath(track.localAudioUri);
-            if (uri) player.replace(uri);
+            if (uri) {
+              player.replace(uri);
+              player.setActiveForLockScreen(true, {
+                title: track.title,
+                artist: track.artistName || 'Unknown Artist',
+                albumTitle: track.albumTitle || 'Single',
+                artworkUrl: track.localCoverUri ? resolveLocalPath(track.localCoverUri) : undefined,
+              }, {
+                showSeekForward: true,
+                showSeekBackward: true
+              });
+            }
             const allSongs = Object.values(downloadedSongs);
             setQueue(allSongs);
             const idx = allSongs.findIndex(t => t.id === track.id);
@@ -85,7 +108,10 @@ export function PlayerProvider({ children }) {
         }
       } catch (e) { console.error('Failed to restore playback state:', e); }
     };
-    if (Object.keys(downloadedSongs).length > 0 && API_URL) restoreState();
+    if (Object.keys(downloadedSongs).length > 0 && API_URL && !isRestoredRef.current) {
+      isRestoredRef.current = true;
+      restoreState();
+    }
   }, [downloadedSongs, player, API_URL, sessionId]);
 
   // Periodic persistence
@@ -105,7 +131,13 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     if (currentTrack && downloadedSongs[currentTrack.id]) {
       const latest = downloadedSongs[currentTrack.id];
-      if (latest.localCoverUri !== currentTrack.localCoverUri || latest.localAudioUri !== currentTrack.localAudioUri) {
+      const lyricsChanged = latest.lyrics !== currentTrack.lyrics;
+      if (
+        latest.localCoverUri !== currentTrack.localCoverUri ||
+        latest.localAudioUri !== currentTrack.localAudioUri ||
+        lyricsChanged
+      ) {
+        console.log('[PlayerContext] Syncing currentTrack from downloadedSongs. lyrics present:', !!latest.lyrics);
         setCurrentTrack(latest);
       }
     }
@@ -129,6 +161,11 @@ export function PlayerProvider({ children }) {
       advanceGuardRef.current = null;
       lastTimeRef.current = 0;
       wasPlayingRef.current = false;
+      
+      // Reset plays tracking
+      listeningTimeRef.current = 0;
+      playRecordedRef.current = false;
+      lastUpdateTimeRef.current = Date.now();
 
       if (newQueue) {
         setQueue(newQueue);
@@ -153,21 +190,28 @@ export function PlayerProvider({ children }) {
         return;
       }
 
-      const uri = resolveLocalPath(track.localAudioUri);
-      if (uri) player.replace(uri);
-      if (startPositionMs > 0) player.seekTo(startPositionMs / 1000);
-      player.play();
-      setCurrentTrack(track);
-      currentTrackRef.current = track;
-
-      const artworkUri = resolveLocalPath(track.localCoverUri) || track.coverUrl;
+      const audioUri = track.localAudioUri ? resolveLocalPath(track.localAudioUri) : null;
+      const artworkUri = track.localCoverUri ? resolveLocalPath(track.localCoverUri) : undefined;
       
-      player.metadata = {
+      if (audioUri) {
+        player.replace(audioUri);
+        setTimeout(() => player.play(), 100);
+      } else {
+        player.play();
+      }
+      
+      player.setActiveForLockScreen(true, {
         title: track.title,
         artist: track.artistName || 'Unknown Artist',
-        album: track.albumTitle || 'Single',
-        artwork: artworkUri,
-      };
+        albumTitle: track.albumTitle || 'Single',
+        artworkUrl: artworkUri,
+      }, {
+        showSeekForward: true,
+        showSeekBackward: true
+      });
+
+      setCurrentTrack(track);
+      currentTrackRef.current = track;
 
       const state = { songId: track.id, positionMs: startPositionMs };
       AsyncStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state))
@@ -265,6 +309,23 @@ export function PlayerProvider({ children }) {
 
       if (status.playing) {
         wasPlayingRef.current = true;
+        
+        // Track listening time (30s rule)
+        const now = Date.now();
+        const delta = (now - lastUpdateTimeRef.current) / 1000;
+        lastUpdateTimeRef.current = now;
+
+        if (delta > 0 && delta < 2) { // Guard against huge jumps or background resume spikes
+          listeningTimeRef.current += delta;
+        }
+
+        if (listeningTimeRef.current >= 30 && !playRecordedRef.current && currentTrackRef.current) {
+          playRecordedRef.current = true;
+          recordPlay(currentTrackRef.current.id);
+          console.log(`[Player] 30s milestone reached for ${currentTrackRef.current.title}. Play recorded.`);
+        }
+      } else {
+        lastUpdateTimeRef.current = Date.now();
       }
     });
 

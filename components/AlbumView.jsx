@@ -24,7 +24,7 @@ const TOKENS = {
   tertiary: '#fff8f2',
 };
 
-export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying, router }) {
+export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying, router, handleShufflePlay }) {
   const { resolveLocalPath } = useSync();
   const { repeatMode, toggleRepeatMode, addToQueue, shuffleMode, toggleShuffleMode, expandPlayer } = usePlayer();
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -140,7 +140,7 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
             {/* High-Impact Atelier Controls */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
               <TouchableOpacity 
-                onPress={toggleShuffleMode}
+                onPress={handleShufflePlay}
                 style={{ 
                   width: 42, 
                   height: 42, 

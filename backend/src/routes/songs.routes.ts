@@ -127,4 +127,29 @@ router.post('/:id/like', authenticateSession, async (req: any, res) => {
   }
 });
 
+// Record a single play
+router.post('/:id/play', authenticateSession, async (req: any, res) => {
+  try {
+    const { recordPlay } = require('../services/songs.service');
+    await recordPlay(req.user.id, req.params.id);
+    res.status(204).send();
+  } catch (error: any) {
+    console.error(`[Music] Error recording play for ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to record play' });
+  }
+});
+
+// Bulk sync plays
+router.post('/plays/sync', authenticateSession, async (req: any, res) => {
+  try {
+    const { plays } = req.body;
+    const { syncPlays } = require('../services/songs.service');
+    await syncPlays(req.user.id, plays);
+    res.status(204).send();
+  } catch (error: any) {
+    console.error('[Music] Error syncing plays:', error);
+    res.status(500).json({ error: 'Failed to sync plays' });
+  }
+});
+
 export default router;

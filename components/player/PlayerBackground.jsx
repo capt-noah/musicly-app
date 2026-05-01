@@ -8,8 +8,6 @@ const PlayerBackground = React.memo(({ currentColors, nextColors, ambianceFade }
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {/* BASE BACKGROUND */}
       <View 
-        renderToHardwareTextureAndroid
-        shouldRasterizeIOS
         style={StyleSheet.absoluteFillObject}
       >
         <LinearGradient

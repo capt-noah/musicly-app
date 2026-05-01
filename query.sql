@@ -46,9 +46,18 @@ CREATE TABLE music (
     cover_file_id TEXT,
     title TEXT NOT NULL,
     duration_sec INTEGER NOT NULL,
+    plays INTEGER DEFAULT 0,
     mime_type TEXT,
     file_size INTEGER NOT NULL,
     uploaded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+CREATE TABLE play_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    song_id UUID REFERENCES music(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    played_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 

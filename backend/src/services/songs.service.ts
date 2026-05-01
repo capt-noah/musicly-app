@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { music, topTracks, albums, musicArtists, artists, users, likedSongs } from '../schema';
+import { music, topTracks, albums, musicArtists, artists, users, likedSongs, playHistory } from '../schema';
 import { bot } from '../config';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -14,6 +14,7 @@ export async function getTopTracks(): Promise<any[]> {
     coverFileId: music.coverFileId,
     title: music.title,
     rank: topTracks.rank,
+    plays: music.plays,
     albumTitle: albums.title,
     artistName: sql<string>`COALESCE(${albumArtist.name}, ${directArtist.name}, 'Unknown Artist')`,
   })
@@ -45,6 +46,7 @@ export async function getSongsByUser(userId: string): Promise<any[]> {
     coverFileId: music.coverFileId,
     durationSec: music.durationSec,
     fileSize: music.fileSize,
+    plays: music.plays,
     uploadedAt: music.uploadedAt,
     albumTitle: albums.title,
     artistName: sql<string>`COALESCE(${albumArtist.name}, ${directArtist.name}, 'Unknown Artist')`,
@@ -326,6 +328,7 @@ export async function getLikedSongs(userId: string): Promise<any[]> {
     coverFileId: music.coverFileId,
     durationSec: music.durationSec,
     fileSize: music.fileSize,
+    plays: music.plays,
     uploadedAt: music.uploadedAt,
     albumTitle: albums.title,
     artistName: sql<string>`COALESCE(${albumArtist.name}, ${directArtist.name}, 'Unknown Artist')`,
@@ -365,4 +368,42 @@ export async function deleteSong(songId: string, userId: string): Promise<void> 
   // 3. Delete from the main music table
   await db.delete(music)
     .where(and(eq(music.id, songId), eq(music.uploaderId, userId)));
+}
+
+/**
+ * Records a single play for a song.
+ */
+export async function recordPlay(userId: string, songId: string) {
+  return await db.transaction(async (tx) => {
+    // 1. Increment play count on music table
+    await tx.update(music)
+      .set({ plays: sql`${music.plays} + 1` })
+      .where(eq(music.id, songId));
+
+    // 2. Add entry to play_history
+    await tx.insert(playHistory)
+      .values({ userId, songId });
+  });
+}
+
+/**
+ * Syncs multiple play events at once.
+ */
+export async function syncPlays(userId: string, plays: any[]) {
+  return await db.transaction(async (tx) => {
+    for (const play of plays) {
+      // Increment play count
+      await tx.update(music)
+        .set({ plays: sql`${music.plays} + 1` })
+        .where(eq(music.id, play.songId));
+
+      // Add to history
+      await tx.insert(playHistory)
+        .values({ 
+          userId, 
+          songId: play.songId, 
+          playedAt: play.playedAt ? new Date(play.playedAt) : undefined 
+        });
+    }
+  });
 }

@@ -48,9 +48,11 @@ export const AuthProvider = ({ children }) => {
         const userData = await response.json();
         setUser(userData);
         await AsyncStorage.setItem('user', JSON.stringify(userData));
-      } else {
+      } else if (response.status === 401 || response.status === 403) {
         // Session expired
         logout();
+      } else {
+        console.warn(`Server returned ${response.status} during session validation. Staying logged in.`);
       }
     } catch (e) {
       console.warn('Could not validate session (offline?)');

@@ -9,7 +9,8 @@ import {
   TextInput,
   StatusBar,
   ActivityIndicator,
-  Alert
+  Alert,
+  Image
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Mail, Lock, User, Eye, EyeOff, Activity, IdCard } from "lucide-react-native";
@@ -109,7 +110,7 @@ export default function Index() {
   return (
     <>
       <StatusBar barStyle="light-content" />
-      <View className="flex-1 bg-[#101211]">
+      <SafeAreaView className="flex-1 bg-[#101211]">
         {/* Soft Background Glows matching the screenshot */}
         <View className="absolute top-0 w-full h-[50vh] overflow-hidden">
           <View className="absolute -top-32 left-[5%] w-[90%] h-96 bg-[#263128] rounded-[100px] opacity-40 blur-3xl transform rotate-12" />
@@ -123,8 +124,12 @@ export default function Index() {
           >
             {/* Header Area */}
             <View className="items-center mb-8 z-10">
-              <View className="w-14 h-14 bg-[#141715] rounded-2xl items-center justify-center mb-6 shadow-2xl border border-[#ffffff08]">
-                <Activity size={28} color="#b1cbba" strokeWidth={1.5} />
+              <View className="w-16 h-16 rounded-3xl overflow-hidden items-center justify-center mb-6 shadow-2xl border border-[#ffffff08]">
+                <Image 
+                  source={require('../assets/images/icon.png')} 
+                  style={{ width: '100%', height: '100%' }} 
+                  resizeMode="cover"
+                />
               </View>
               {!isSignUp && (
                  <Text className="text-[#ffffff] text-xs font-bold tracking-[0.3rem] uppercase mb-4 opacity-90">
@@ -327,7 +332,7 @@ export default function Index() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </View>
+      </SafeAreaView>
     </>
   );
 }

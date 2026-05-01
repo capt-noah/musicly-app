@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Dimensions, Animated, PanResponder } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, router } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, ChevronLeft, ChevronRight, Shuffle, CloudDownload, RefreshCw } from 'lucide-react-native';
@@ -203,23 +203,32 @@ export default function Home() {
     );
   }, [downloadedSongs]);
 
-  const dynamicAlbums = React.useMemo(() => {
+  const topPlayedAlbums = React.useMemo(() => {
     const albumMap = {};
     Object.values(downloadedSongs).forEach(song => {
+      if (!song.plays) return;
       const key = song.albumId || `unassigned-${song.id}`;
       if (!albumMap[key]) {
         albumMap[key] = {
           id: key,
           label: song.albumTitle || song.title,
           artist: song.artistName || 'Unknown Artist',
-          imageUrl: resolveLocalPath(song.localCoverUri)
+          imageUrl: resolveLocalPath(song.localCoverUri),
+          plays: 0,
+          songsPlayed: 0,
         };
       }
+      albumMap[key].plays += song.plays;
+      albumMap[key].songsPlayed += 1;
     });
-    return Object.values(albumMap).map((album, index) => ({
-      ...album,
-      tag: `#${index + 1}`
-    }));
+
+    return Object.values(albumMap)
+      .sort((a, b) => b.plays - a.plays || b.songsPlayed - a.songsPlayed)
+      .slice(0, 5)
+      .map((album, index) => ({
+        ...album,
+        tag: `#${index + 1}`
+      }));
   }, [downloadedSongs, resolveLocalPath]);
 
   useEffect(() => {
@@ -278,7 +287,7 @@ export default function Home() {
         className="flex-1"
       >
         <ShuffleCarousel 
-          cards={dynamicAlbums.length > 5 ? dynamicAlbums.slice(0, 5) : dynamicAlbums} 
+          cards={topPlayedAlbums} 
           featuredImageUrl={featured.imageUrl} 
           userName={user?.username || user?.firstName}
         />
