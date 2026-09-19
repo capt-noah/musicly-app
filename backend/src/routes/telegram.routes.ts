@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { generateLinkToken } from '../services/linking.service';
+import { unlinkTelegramFromUser } from '../services/auth.service';
 import { authenticateSession } from '../middleware/auth.middleware';
 import { users } from '../schema';
 import { db } from '../db';
@@ -35,6 +36,19 @@ router.get('/link-status', authenticateSession as any, async (req: any, res) => 
     res.json({ linked: !!user?.telegramId, telegramId: user?.telegramId });
   } catch (error) {
     res.status(500).json({ error: 'Failed to check link status' });
+  }
+});
+
+/**
+ * Unlinks Telegram from the authenticated user and clears the profile photo.
+ */
+router.post('/unlink', authenticateSession as any, async (req: any, res) => {
+  try {
+    const updatedUser = await unlinkTelegramFromUser(req.user.id);
+    res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error('[Telegram] Error unlinking account:', error);
+    res.status(500).json({ error: 'Failed to unlink Telegram account' });
   }
 });
 

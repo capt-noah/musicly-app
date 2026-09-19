@@ -1,6 +1,6 @@
 import React from 'react'
 import { Image, Pressable, Text, View } from 'react-native'
-import avatar from '../assets/images/alex.jpeg'
+import avatar from '../assets/images/profile.jpg'
 
 // actions: [{ key: string, icon: ReactNode, onPress?: () => void }]
 const SpotifyHeader = ({ title, rightText, actions = [] }) => {

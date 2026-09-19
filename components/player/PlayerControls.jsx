@@ -2,6 +2,7 @@ import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { ChevronUp, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react-native";
 import { TOKENS } from "./playerUtils";
+import { haptics } from "../../utils/haptics";
 
 const PlayerControls = React.memo(({ 
   toggleShuffleMode, 
@@ -14,14 +15,46 @@ const PlayerControls = React.memo(({
   repeatMode, 
   setLyricsOpen 
 }) => {
+  const onShufflePress = () => {
+    haptics.selection();
+    toggleShuffleMode();
+  };
+
+  const onPrevPress = () => {
+    haptics.impactLight();
+    handlePrev();
+  };
+
+  const onNextPress = () => {
+    haptics.impactLight();
+    handleNext();
+  };
+
+  const onPlayPausePress = () => {
+    haptics.impactMedium();
+    togglePlayback();
+  };
+
+  const onRepeatPress = () => {
+    haptics.selection();
+    toggleRepeatMode();
+  };
+
+  const onLyricsPress = () => {
+    haptics.impactLight();
+    setLyricsOpen(true);
+  };
+
   return (
     <>
       <View className="flex-row items-center justify-between mb-12 px-2">
         {/* Shuffle Button */}
         <TouchableOpacity 
-          onPress={toggleShuffleMode}
+          activeOpacity={0.7}
+          onPress={onShufflePress}
           className="w-10 h-10 items-center justify-center rounded-full"
           style={{ backgroundColor: shuffleMode ? 'rgba(185, 203, 186, 0.15)' : 'transparent' }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Shuffle 
             size={24} 
@@ -32,12 +65,18 @@ const PlayerControls = React.memo(({
         
         {/* Playback Controls */}
         <View className="flex-row items-center gap-4 justify-center">
-          <TouchableOpacity onPress={handlePrev} className="w-12 h-12 items-center justify-center">
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={onPrevPress} 
+            className="w-12 h-12 items-center justify-center"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <SkipBack size={32} color="#ffffff" fill="#ffffff" />
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={togglePlayback}
+            activeOpacity={0.8}
+            onPress={onPlayPausePress}
             style={{ 
               backgroundColor: '#ffffff',
               shadowColor: '#ffffff',
@@ -55,16 +94,23 @@ const PlayerControls = React.memo(({
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleNext} className="w-12 h-12 items-center justify-center">
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={onNextPress} 
+            className="w-12 h-12 items-center justify-center"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <SkipForward size={32} color="#ffffff" fill="#ffffff" />
           </TouchableOpacity>
         </View>
 
         {/* Repeat Button */}
         <TouchableOpacity 
-          onPress={toggleRepeatMode}
+          activeOpacity={0.7}
+          onPress={onRepeatPress}
           className="w-10 h-10 items-center justify-center rounded-full"
           style={{ backgroundColor: repeatMode !== 'OFF' ? 'rgba(185, 203, 186, 0.15)' : 'transparent' }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           {repeatMode === 'ONE' ? (
             <Repeat1 size={24} color={TOKENS.primary} strokeWidth={3} />
@@ -78,7 +124,7 @@ const PlayerControls = React.memo(({
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity onPress={() => setLyricsOpen(true)} className="items-center">
+      <TouchableOpacity activeOpacity={0.7} onPress={onLyricsPress} className="items-center">
         <ChevronUp size={16} color={TOKENS.onSurfaceVariant} strokeWidth={2.5} />
         <Text style={{ color: TOKENS.onSurfaceVariant, letterSpacing: 2 }} className="text-[10px] font-black uppercase mt-1.5">Lyrics</Text>
       </TouchableOpacity>

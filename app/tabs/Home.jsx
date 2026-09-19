@@ -62,7 +62,7 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
         }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
+          { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
       >
@@ -105,12 +105,12 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
               }}
             >
               <TouchableOpacity 
-                activeOpacity={0.95} 
+                activeOpacity={0.9} 
                 style={{ width: '100%', height: '100%' }}
                 onPress={() => router.push({ pathname: '/playlist', params: { albumId: card.id, title: card.label, artist: card.artist, cover: card.imageUrl }})}
               >
                 {getImage(card) ? (
-                  <Image source={{ uri: getImage(card) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={300} />
+                  <Image source={{ uri: getImage(card) }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={200} cachePolicy="memory-disk" />
                 ) : (
                   <View style={{ flex: 1, backgroundColor: TOKENS.surfaceHigh, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
                     <Shuffle size={48} color={TOKENS.primary} style={{ opacity: 0.2, marginBottom: 16 }} />
@@ -144,9 +144,9 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
               (i + 1) * FULL_CARD_W,
             ];
 
-            const dotWidth = scrollX.interpolate({
+            const scaleX = scrollX.interpolate({
               inputRange,
-              outputRange: [6, 20, 6],
+              outputRange: [1, 3.3, 1],
               extrapolate: 'clamp',
             });
 
@@ -160,11 +160,12 @@ const ShuffleCarousel = ({ cards, featuredImageUrl, userName }) => {
               <Animated.View
                 key={i}
                 style={{
-                  width: dotWidth,
+                  width: 6,
                   height: 6,
                   borderRadius: 3,
                   backgroundColor: TOKENS.primary,
                   opacity,
+                  transform: [{ scaleX }],
                 }}
               />
             );

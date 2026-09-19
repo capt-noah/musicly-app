@@ -50,9 +50,14 @@ router.post('/:id/songs', authenticateSession, async (req: any, res) => {
     const { songId } = req.body;
     if (!songId) return res.status(400).json({ error: 'Song ID is required' });
     
+    const playlist = await PlaylistService.getPlaylistById(req.params.id);
+    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+    if (playlist.ownerId !== req.user.id) return res.status(403).json({ error: 'Unauthorized to modify this playlist' });
+
     const entry = await PlaylistService.addSongToPlaylist(req.params.id, songId);
     res.json(entry);
   } catch (error) {
+    console.error('[Playlists] Error adding song to playlist:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -60,9 +65,14 @@ router.post('/:id/songs', authenticateSession, async (req: any, res) => {
 // Remove a song from a playlist
 router.delete('/:id/songs/:songId', authenticateSession, async (req: any, res) => {
   try {
+    const playlist = await PlaylistService.getPlaylistById(req.params.id);
+    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+    if (playlist.ownerId !== req.user.id) return res.status(403).json({ error: 'Unauthorized to modify this playlist' });
+
     await PlaylistService.removeSongFromPlaylist(req.params.id, req.params.songId);
     res.status(204).send();
   } catch (error) {
+    console.error('[Playlists] Error removing song from playlist:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

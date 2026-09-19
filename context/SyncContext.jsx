@@ -381,7 +381,7 @@ export function SyncProvider({ children }) {
       const realArtist = metadata.common.artist;
       const realTitle = metadata.common.title;
       const rawLyrics = metadata.common.lyrics;
-      const lyrics = rawLyrics && rawLyrics.length > 0 ? rawLyrics[0] : null;
+      const lyrics = rawLyrics && rawLyrics.length > 0 ? (typeof rawLyrics[0] === 'string' ? rawLyrics[0] : rawLyrics[0]?.text || null) : null;
 
 
       // Report real metadata back to server so grouping is accurate
@@ -455,7 +455,8 @@ export function SyncProvider({ children }) {
         }
         
         const data = await response.json();
-        url = data.url;
+        url = data.url ? (data.url.startsWith('/') ? `${BASE_URL}${data.url}` : data.url) : null;
+        if (!url) throw new Error('No valid download URL received');
       }
 
       const extension = type === 'audio' ? 'mp3' : 'jpg';

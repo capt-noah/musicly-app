@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, Dimensions, KeyboardAvoidingView, Platform, Animated, PanResponder, Keyboard, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { haptics } from '../utils/haptics';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -81,6 +82,7 @@ export default function SonicSheet({
       }),
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 120 || gestureState.vy > 0.5) {
+          haptics.impactLight();
           onClose();
         } else {
           Animated.spring(panY, {
@@ -94,6 +96,7 @@ export default function SonicSheet({
   ).current;
 
   const handleClose = () => {
+    haptics.impactLight();
     Keyboard.dismiss();
     onClose();
   };

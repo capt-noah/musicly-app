@@ -1,8 +1,8 @@
 import { db } from '../db';
-import { music, topTracks, albums, musicArtists, artists, users, likedSongs, playHistory } from '../schema';
-import { bot } from '../config';
+import { music, topTracks, albums, musicArtists, artists, users, likes, playHistory } from '../schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
+
 
 export async function getTopTracks(): Promise<any[]> {
   const albumArtist = alias(artists, 'albumArtist');
@@ -299,17 +299,18 @@ export async function updateAlbumCover(albumId: string, coverArt: string) {
  */
 export async function toggleLike(userId: string, songId: string): Promise<boolean> {
   const [existing] = await db.select()
-    .from(likedSongs)
-    .where(and(eq(likedSongs.userId, userId), eq(likedSongs.songId, songId)))
+    .from(likes)
+    .where(and(eq(likes.userId, userId), eq(likes.songId, songId)))
     .limit(1);
 
   if (existing) {
-    await db.delete(likedSongs)
-      .where(and(eq(likedSongs.userId, userId), eq(likedSongs.songId, songId)));
+    await db.delete(likes)
+      .where(and(eq(likes.userId, userId), eq(likes.songId, songId)));
     return false;
   } else {
-    await db.insert(likedSongs)
-      .values({ userId, songId });
+    await db.insert(likes)
+      .values({ userId, songId })
+      .onConflictDoNothing();
     return true;
   }
 }
@@ -333,10 +334,10 @@ export async function getLikedSongs(userId: string): Promise<any[]> {
     albumTitle: albums.title,
     artistName: sql<string>`COALESCE(${albumArtist.name}, ${directArtist.name}, 'Unknown Artist')`,
     albumId: music.albumId,
-    likedAt: likedSongs.likedAt,
+    likedAt: likes.createdAt,
   })
-  .from(likedSongs)
-  .innerJoin(music, eq(likedSongs.songId, music.id))
+  .from(likes)
+  .innerJoin(music, eq(likes.songId, music.id))
   .leftJoin(albums, eq(music.albumId, albums.id))
   .leftJoin(albumArtist, eq(albums.artistId, albumArtist.id))
   .leftJoin(
@@ -347,28 +348,40 @@ export async function getLikedSongs(userId: string): Promise<any[]> {
     )
   )
   .leftJoin(directArtist, eq(musicArtists.artistId, directArtist.id))
-  .where(eq(likedSongs.userId, userId))
-  .orderBy(desc(likedSongs.likedAt));
+  .where(eq(likes.userId, userId))
+  .orderBy(desc(likes.createdAt));
   
   return results;
 }
 
 /**
- * Permanently deletes a song from the library.
+ * Permanently deletes a song from the library (with ownership verification).
  */
 export async function deleteSong(songId: string, userId: string): Promise<void> {
   console.log(`[Service] Deleting song ${songId} for user ${userId}`);
   
-  // 1. Delete from musicArtists (junction table)
-  await db.delete(musicArtists).where(eq(musicArtists.musicId, songId));
-  
-  // 2. Delete from topTracks if it exists
-  await db.delete(topTracks).where(eq(topTracks.songId, songId));
-  
-  // 3. Delete from the main music table
-  await db.delete(music)
-    .where(and(eq(music.id, songId), eq(music.uploaderId, userId)));
+  const [song] = await db.select()
+    .from(music)
+    .where(and(eq(music.id, songId), eq(music.uploaderId, userId)))
+    .limit(1);
+
+  if (!song) {
+    throw new Error('Song not found or unauthorized');
+  }
+
+  await db.transaction(async (tx) => {
+    // 1. Delete from musicArtists (junction table)
+    await tx.delete(musicArtists).where(eq(musicArtists.musicId, songId));
+    
+    // 2. Delete from topTracks if it exists
+    await tx.delete(topTracks).where(eq(topTracks.songId, songId));
+    
+    // 3. Delete from the main music table
+    await tx.delete(music)
+      .where(and(eq(music.id, songId), eq(music.uploaderId, userId)));
+  });
 }
+
 
 /**
  * Records a single play for a song.

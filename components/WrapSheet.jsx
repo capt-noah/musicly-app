@@ -5,7 +5,9 @@ import { Music, Clock, Play, ChevronRight, TrendingUp, Share2, Sparkles, X } fro
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import SonicSheet from './SonicSheet';
+import { haptics } from '../utils/haptics';
 
 const TOKENS = {
   surface: '#0d0f0d',
@@ -17,23 +19,24 @@ const TOKENS = {
   tertiary: '#fff8f2',
 };
 
-export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLocalPath }) {
+export default function WrapSheet({ visible, onClose, downloadedSongs = {}, resolveLocalPath }) {
   const [range, setRange] = useState('Weekly'); // 'Daily' | 'Weekly' | 'Monthly'
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const viewShotRef = useRef();
 
   const stats = useMemo(() => {
-    const songs = Object.values(downloadedSongs);
+    const songs = Object.values(downloadedSongs || {});
     if (songs.length === 0) {
       return null;
     }
 
-    // In a real app, we would filter based on playHistory timestamps
-    // For now, we'll use the aggregate 'plays' but label it by range
     const sorted = [...songs].sort((a, b) => (b.plays || 0) - (a.plays || 0));
     const topTracks = sorted.slice(0, 10);
     const totalPlays = songs.reduce((acc, s) => acc + (s.plays || 0), 0);
     const totalMinutes = Math.floor(songs.reduce((acc, s) => acc + (s.plays || 0) * (s.duration || s.durationSec || 180), 0) / 60);
 
-    // Top 5 Artists
     const artistMap = {};
     songs.forEach(s => {
       const name = s.artistName || 'Unknown Artist';
@@ -47,15 +50,12 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
     return { topTracks, topArtists, totalPlays, totalMinutes };
   }, [downloadedSongs, range]);
 
-  const [showShareCard, setShowShareCard] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-  const viewShotRef = useRef();
-
   // Animation values for the Share Card
   const shareFadeAnim = useRef(new Animated.Value(0)).current;
   const shareScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const openShareCard = () => {
+    haptics.impactMedium();
     setShowShareCard(true);
     Animated.parallel([
       Animated.timing(shareFadeAnim, {
@@ -73,6 +73,7 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
   };
 
   const closeShareCard = () => {
+    haptics.impactLight();
     Animated.parallel([
       Animated.timing(shareFadeAnim, {
         toValue: 0,
@@ -91,6 +92,7 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
 
   const handleShare = async () => {
     if (isSharing) return;
+    haptics.impactMedium();
     setIsSharing(true);
     try {
       const uri = await captureRef(viewShotRef, { format: 'png', quality: 1 });
@@ -113,6 +115,7 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
 
   const handleDownload = async () => {
     if (isDownloading) return;
+    haptics.impactMedium();
     setIsDownloading(true);
     try {
       const uri = await captureRef(viewShotRef, { format: 'png', quality: 1 });
@@ -120,6 +123,7 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           await MediaLibrary.saveToLibraryAsync(uri);
+          haptics.notificationSuccess();
           Alert.alert('Saved! 🎉', 'Your Musicly Wrap has been saved to your Photos.');
           return;
         }
@@ -192,6 +196,8 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
                               <Image 
                                 source={{ uri: resolveLocalPath(stats?.topTracks[0]?.localCoverUri) }} 
                                 style={{ width: 120, height: 120, borderRadius: 24 }}
+                                cachePolicy="memory-disk"
+                                transition={200}
                               />
                            </View>
                         </View>
@@ -262,6 +268,7 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
             onPress={openShareCard}
             style={{ backgroundColor: TOKENS.primary + '20' }}
             className="w-10 h-10 rounded-full items-center justify-center"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Sparkles size={18} color={TOKENS.primary} />
           </TouchableOpacity>
@@ -270,7 +277,10 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
             {['Daily', 'Weekly', 'Monthly'].map(r => (
               <TouchableOpacity 
                 key={r}
-                onPress={() => setRange(r)}
+                onPress={() => {
+                  haptics.selection();
+                  setRange(r);
+                }}
                 style={{ backgroundColor: range === r ? TOKENS.primary : 'transparent' }}
                 className="px-4 py-1.5 rounded-full"
               >
@@ -308,6 +318,8 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
                 <Image 
                   source={{ uri: resolveLocalPath(song.localCoverUri) }} 
                   style={{ width: '100%', height: '100%' }}
+                  cachePolicy="memory-disk"
+                  transition={200}
                 />
               </View>
               <View className="flex-1">
@@ -331,3 +343,4 @@ export default function WrapSheet({ visible, onClose, downloadedSongs, resolveLo
     </SonicSheet>
   );
 }
+

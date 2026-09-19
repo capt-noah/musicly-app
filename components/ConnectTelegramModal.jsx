@@ -3,9 +3,10 @@ import { View, Text, TouchableOpacity, Linking, ActivityIndicator } from 'react-
 import { Send, CheckCircle2 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import SonicSheet from './SonicSheet';
+import { haptics } from '../utils/haptics';
 
 export default function ConnectTelegramModal({ visible, onClose }) {
-  const { API_URL } = useAuth();
+  const { API_URL, sessionId } = useAuth();
   const [token, setToken] = useState(null);
   const [botUsername, setBotUsername] = useState('my_musicly_bot');
   const [loading, setLoading] = useState(true);
@@ -21,11 +22,16 @@ export default function ConnectTelegramModal({ visible, onClose }) {
   const handleInitialCheck = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/telegram/link-status`);
+      const response = await fetch(`${API_URL}/telegram/link-status`, {
+        headers: {
+          'Authorization': `Bearer ${sessionId}`
+        }
+      });
       const data = await response.json();
       
       if (data.linked) {
         setIsLinked(true);
+        haptics.notificationSuccess();
         setTimeout(() => setLoading(false), 1500);
       } else {
         await fetchToken();
@@ -41,6 +47,9 @@ export default function ConnectTelegramModal({ visible, onClose }) {
     try {
       const response = await fetch(`${API_URL}/telegram/link-token`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionId}`
+        }
       });
       const data = await response.json();
       if (data.token) {
@@ -52,9 +61,14 @@ export default function ConnectTelegramModal({ visible, onClose }) {
 
   const checkStatus = async () => {
     try {
-      const response = await fetch(`${API_URL}/telegram/link-status`);
+      const response = await fetch(`${API_URL}/telegram/link-status`, {
+        headers: {
+          'Authorization': `Bearer ${sessionId}`
+        }
+      });
       const data = await response.json();
       if (data.linked) {
+        haptics.notificationSuccess();
         setIsLinked(true);
       }
     } catch (e) {}
@@ -69,6 +83,7 @@ export default function ConnectTelegramModal({ visible, onClose }) {
   }, [visible, isLinked, loading]);
 
   const handleOpenTelegram = () => {
+    haptics.impactMedium();
     if (token) {
       const url = `https://t.me/${botUsername}?start=${token}`;
       Linking.openURL(url);
@@ -102,7 +117,11 @@ export default function ConnectTelegramModal({ visible, onClose }) {
               Your account is verified. You can now send audio files directly to @{botUsername}.
             </Text>
             <TouchableOpacity 
-              onPress={onClose}
+              onPress={() => {
+                haptics.impactLight();
+                onClose();
+              }}
+              activeOpacity={0.85}
               style={{ backgroundColor: '#b9cbba' }}
               className="w-full py-5 rounded-3xl items-center shadow-lg"
             >
@@ -144,6 +163,7 @@ export default function ConnectTelegramModal({ visible, onClose }) {
 
             <TouchableOpacity 
               onPress={handleOpenTelegram}
+              activeOpacity={0.85}
               style={{ backgroundColor: '#b9cbba' }}
               className="w-full py-5 rounded-3xl flex-row justify-center items-center shadow-xl"
             >
@@ -156,3 +176,4 @@ export default function ConnectTelegramModal({ visible, onClose }) {
     </SonicSheet>
   );
 }
+

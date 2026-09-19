@@ -1,13 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Play, MoreHorizontal, AudioLines, Shuffle, Home, Search, Library, User } from 'lucide-react-native';
+import { ChevronLeft, Play, MoreHorizontal, AudioLines, Shuffle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSync } from '../context/SyncContext';
 import { usePlayer } from '../context/PlayerContext';
-import MiniPlayer from './MiniPlayer';
+import { haptics } from '../utils/haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,7 +25,7 @@ const TOKENS = {
 
 export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying, router, handleShufflePlay }) {
   const { resolveLocalPath } = useSync();
-  const { repeatMode, toggleRepeatMode, addToQueue, shuffleMode, toggleShuffleMode, expandPlayer } = usePlayer();
+  const { addToQueue, shuffleMode } = usePlayer();
   const scrollY = useRef(new Animated.Value(0)).current;
 
   // Header image opacity based on scroll
@@ -43,6 +42,28 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
   });
 
   const resolvedCover = resolveLocalPath(playlist.imageUrl);
+
+  const onTrackPress = (track) => {
+    haptics.impactLight();
+    playTrack(track, playlist.tracks);
+  };
+
+  const onShufflePress = () => {
+    haptics.impactMedium();
+    handleShufflePlay();
+  };
+
+  const onPlayAllPress = () => {
+    if (playlist.tracks.length > 0) {
+      haptics.impactMedium();
+      playTrack(playlist.tracks[0], playlist.tracks);
+    }
+  };
+
+  const onAddToQueuePress = (track) => {
+    haptics.selection();
+    addToQueue(track);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: TOKENS.surface }}>
@@ -63,6 +84,8 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
            source={{ uri: resolvedCover }} 
            style={{ width: '100%', height: '100%' }}
            contentFit="cover"
+           cachePolicy="memory-disk"
+           transition={200}
         />
         <LinearGradient
           colors={['transparent', 'rgba(13, 15, 13, 0.1)', TOKENS.surface]}
@@ -75,14 +98,20 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
         {/* Navigation Bar */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, zIndex: 100 }}>
           <TouchableOpacity 
-            onPress={() => router.back()}
+            onPress={() => {
+              haptics.impactLight();
+              router.back();
+            }}
             style={{ backgroundColor: 'rgba(0,0,0,0.4)', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <ChevronLeft size={22} color={TOKENS.onSurface} strokeWidth={2} />
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <TouchableOpacity 
+              onPress={() => haptics.selection()}
               style={{ backgroundColor: 'rgba(0,0,0,0.4)', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <MoreHorizontal size={22} color={TOKENS.onSurface} />
             </TouchableOpacity>
@@ -140,7 +169,8 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
             {/* High-Impact Atelier Controls */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
               <TouchableOpacity 
-                onPress={handleShufflePlay}
+                onPress={onShufflePress}
+                activeOpacity={0.8}
                 style={{ 
                   width: 42, 
                   height: 42, 
@@ -154,7 +184,8 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
               </TouchableOpacity>
 
               <TouchableOpacity 
-                onPress={() => playlist.tracks.length > 0 && playTrack(playlist.tracks[0], playlist.tracks)}
+                onPress={onPlayAllPress}
+                activeOpacity={0.85}
                 style={{
                   width: 48,
                   height: 48,
@@ -183,7 +214,6 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
               >
                 Track List
               </Text>
-
             </View>
 
             <View className="px-4">
@@ -193,7 +223,8 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
                 return (
                   <TouchableOpacity 
                     key={track.id} 
-                    onPress={() => playTrack(track, playlist.tracks)}
+                    onPress={() => onTrackPress(track)}
+                    activeOpacity={0.7}
                     style={{
                       backgroundColor: isActive ? TOKENS.surfaceHighest : TOKENS.surfaceHigh,
                       marginBottom: 10,
@@ -235,7 +266,8 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
                       </Text>
                     </View>
                     <TouchableOpacity 
-                      onPress={() => addToQueue(track)}
+                      onPress={() => onAddToQueuePress(track)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       className="w-10 h-10 items-center justify-center rounded-full bg-black/10"
                     >
                       <MoreHorizontal size={20} color={TOKENS.onSurfaceVariant} />
@@ -253,37 +285,7 @@ export default function AlbumView({ playlist, playTrack, currentTrack, isPlaying
           </View>
         </Animated.ScrollView>
       </SafeAreaView>
-
-      {/* MiniPlayer & Navigation Layer (Sonic Glass) */}
-      <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100 }}>
-        <MiniPlayer onPress={expandPlayer} />
-        
-        <BlurView 
-            tint="dark" 
-            intensity={95} 
-            style={{ 
-                height: 90,
-                backgroundColor: 'rgba(13, 15, 13, 0.85)',
-                flexDirection: 'row',
-                justifyContent: 'space-around',
-                alignItems: 'center',
-                paddingBottom: 24,
-            }} 
-        >
-            <TouchableOpacity onPress={() => router.push('/tabs/Home')}>
-                <Home color={TOKENS.onSurface} size={24} strokeWidth={1.5} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/tabs/Search')}>
-                <Search color={TOKENS.onSurfaceVariant} size={24} strokeWidth={1.5} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/tabs/Library')}>
-                <Library color={TOKENS.onSurfaceVariant} size={24} strokeWidth={1.5} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/tabs/Profile')}>
-                <User color={TOKENS.onSurfaceVariant} size={24} strokeWidth={1.5} />
-            </TouchableOpacity>
-        </BlurView>
-      </View>
     </View>
   );
 }
+

@@ -3,6 +3,7 @@ import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { Heart, Menu } from "lucide-react-native";
 import { useSync } from "../../context/SyncContext";
 import { TOKENS } from "./playerUtils";
+import { haptics } from "../../utils/haptics";
 
 const TrackInfo = React.memo(({ 
   setTargetPlaceholderLayout, 
@@ -13,6 +14,20 @@ const TrackInfo = React.memo(({
 }) => {
   const { toggleLike, likedSongs } = useSync();
   const isLiked = React.useMemo(() => likedSongs.some(s => s.id === currentTrack.id), [likedSongs, currentTrack.id]);
+
+  const handleLike = () => {
+    if (!isLiked) {
+      haptics.notificationSuccess();
+    } else {
+      haptics.impactLight();
+    }
+    toggleLike(currentTrack.id);
+  };
+
+  const handleQueueToggle = () => {
+    haptics.selection();
+    toggleQueueMode();
+  };
 
   return (
     <View className="flex-row items-center justify-between mb-6 overflow-hidden">
@@ -29,11 +44,6 @@ const TrackInfo = React.memo(({
         pointerEvents="none"
       />
 
-      {/* 
-        flex:1 + overflow:hidden ensures the text is clipped at its own
-        boundary and never bleeds over the right-side buttons.
-        The inner Animated.View slides purely on the GPU via translateX.
-      */}
       <View style={{ flex: 1, overflow: "hidden", marginRight: 10 }}>
         <Animated.View style={{
           width: '100%',
@@ -64,7 +74,12 @@ const TrackInfo = React.memo(({
       </View>
 
       <View className="flex-row items-center">
-        <TouchableOpacity className="mr-3" onPress={() => toggleLike(currentTrack.id)}>
+        <TouchableOpacity 
+          activeOpacity={0.7}
+          className="mr-3 p-1" 
+          onPress={handleLike}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Heart 
             size={24} 
             color={isLiked ? TOKENS.primary : "#ffffff"} 
@@ -73,9 +88,11 @@ const TrackInfo = React.memo(({
           />
         </TouchableOpacity>
         <TouchableOpacity 
-          onPress={toggleQueueMode}
+          activeOpacity={0.7}
+          onPress={handleQueueToggle}
           className="w-10 h-10 items-center justify-center rounded-full"
           style={{ backgroundColor: queueMode ? 'rgba(185, 203, 186, 0.15)' : 'transparent' }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Menu 
             size={24} 

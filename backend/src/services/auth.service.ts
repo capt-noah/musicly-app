@@ -45,6 +45,17 @@ export async function linkTelegramToUser(userId: string, telegramId: string, pro
   return user;
 }
 
+export async function unlinkTelegramFromUser(userId: string) {
+  const [user] = await db.update(users)
+    .set({ 
+      telegramId: null,
+      profilePhoto: null
+    })
+    .where(eq(users.id, userId))
+    .returning();
+  return user;
+}
+
 export async function loginUser(username: string, password: string) {
   const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
 

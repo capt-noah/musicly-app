@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
-const LOCAL_BACKEND_URL = 'http://localhost:3000';
+const LOCAL_BACKEND_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 
 function normalizeBaseUrl(rawUrl) {
   return rawUrl.trim().replace(/\/+$/, '');

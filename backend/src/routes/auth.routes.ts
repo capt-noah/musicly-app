@@ -2,8 +2,6 @@ import { Router } from 'express';
 import { registerUser, loginUser, updateUserProfilePhoto } from '../services/auth.service';
 import { createSession, destroySession } from '../services/session.service';
 import { authenticateSession } from '../middleware/auth.middleware';
-import fs from 'fs';
-import path from 'path';
 
 const router = Router();
 
@@ -70,6 +68,7 @@ router.post('/login', async (req: any, res) => {
       message: 'Login Successful',
       sessionId,
       user: {
+        id: user.id,
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -93,7 +92,8 @@ router.post('/logout', authenticateSession as any, async (req: any, res) => {
 });
 
 router.get('/me', authenticateSession as any, (req: any, res) => {
-  res.json(req.user);
+  const { hashedPassword, ...safeUser } = req.user;
+  res.json(safeUser);
 });
 
 router.patch('/me/profile-photo', authenticateSession as any, async (req: any, res) => {
@@ -105,10 +105,12 @@ router.patch('/me/profile-photo', authenticateSession as any, async (req: any, r
     // This satisfies the requirement of "not filling the server" file system.
     const updatedUser = await updateUserProfilePhoto(req.user.id, base64);
 
+    const { hashedPassword, ...safeUser } = req.user;
+
     res.json({ 
       message: 'Profile photo updated', 
       user: {
-        ...req.user,
+        ...safeUser,
         profilePhoto: updatedUser.profilePhoto
       }
     });

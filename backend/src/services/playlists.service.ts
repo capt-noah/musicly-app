@@ -18,6 +18,11 @@ export async function getUserPlaylists(userId: string) {
     .orderBy(playlists.createdAt);
 }
 
+export async function getPlaylistById(playlistId: string) {
+  const [playlist] = await db.select().from(playlists).where(eq(playlists.id, playlistId)).limit(1);
+  return playlist || null;
+}
+
 export async function createPlaylist(userId: string, title: string, description?: string) {
   const result = await db.insert(playlists).values({
     ownerId: userId,

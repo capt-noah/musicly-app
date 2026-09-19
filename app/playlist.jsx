@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AddSongsToPlaylistModal from '../components/AddSongsToPlaylistModal';
 import AlbumView from '../components/AlbumView';
+import { haptics } from '../utils/haptics';
 
 const TOKENS = {
   surface: '#0d0f0d',
@@ -77,7 +78,30 @@ export default function PlaylistDetail() {
       duration: "Album Collection",
       tracks: songs
     };
-  }, [downloadedSongs, params.albumId, params.title, params.artist, params.cover, isAlbumMode]);
+  }, [isAlbumMode, downloadedSongs, params.albumId, params.title, params.artist, params.cover]);
+
+  const handlePlayAll = () => {
+    const tracksToPlay = isAlbumMode ? albumPlaylistData?.tracks : playlistSongs;
+    if (tracksToPlay && tracksToPlay.length > 0) {
+      haptics.impactMedium();
+      playTrack(tracksToPlay[0], tracksToPlay);
+    }
+  };
+
+  const handleShufflePlay = () => {
+    const tracksToPlay = isAlbumMode ? albumPlaylistData?.tracks : playlistSongs;
+    if (tracksToPlay && tracksToPlay.length > 0) {
+      haptics.impactMedium();
+      if (!shuffleMode) toggleShuffleMode();
+      const randomIndex = Math.floor(Math.random() * tracksToPlay.length);
+      playTrack(tracksToPlay[randomIndex], tracksToPlay);
+    }
+  };
+
+  const handleTrackPress = (track) => {
+    haptics.impactLight();
+    playTrack(track, playlistSongs);
+  };
 
   if (isAlbumMode) {
     return (
@@ -100,21 +124,6 @@ export default function PlaylistDetail() {
     );
   }
 
-  const handlePlayAll = () => {
-    if (playlistSongs.length > 0) {
-      playTrack(playlistSongs[0], playlistSongs);
-    }
-  };
-
-  const handleShufflePlay = () => {
-    const tracksToPlay = isAlbumMode ? albumPlaylistData.tracks : playlistSongs;
-    if (tracksToPlay && tracksToPlay.length > 0) {
-      if (!shuffleMode) toggleShuffleMode();
-      const randomIndex = Math.floor(Math.random() * tracksToPlay.length);
-      playTrack(tracksToPlay[randomIndex], tracksToPlay);
-    }
-  };
-
   return (
     <View style={{ flex: 1, backgroundColor: TOKENS.surface }}>
       <StatusBar barStyle="light-content" />
@@ -124,9 +133,13 @@ export default function PlaylistDetail() {
          <View className="px-8 py-4 flex-row justify-between items-center">
           <View className="flex-row items-center">
             <TouchableOpacity 
-              onPress={() => router.back()}
+              onPress={() => {
+                haptics.impactLight();
+                router.back();
+              }}
               style={{ backgroundColor: TOKENS.surfaceHigh }}
               className="w-10 h-10 rounded-full items-center justify-center mr-4"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <ChevronLeft size={18} color={TOKENS.onSurface} strokeWidth={2.5} />
             </TouchableOpacity>
@@ -137,6 +150,8 @@ export default function PlaylistDetail() {
                   source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
                   style={{ width: '100%', height: '100%' }} 
                   contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={200}
                 />
               </View>
               <Text style={{ color: TOKENS.primary }} className="text-[9px] font-black uppercase tracking-widest opacity-80">
@@ -146,8 +161,10 @@ export default function PlaylistDetail() {
           </View>
 
           <TouchableOpacity 
+             onPress={() => haptics.selection()}
              style={{ backgroundColor: TOKENS.surfaceHigh }}
              className="w-10 h-10 rounded-full items-center justify-center"
+             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MoreVertical size={18} color={TOKENS.onSurface} />
           </TouchableOpacity>
@@ -172,6 +189,8 @@ export default function PlaylistDetail() {
                   <Image 
                     source={{ uri: resolveLocalPath(playlistSongs[0].localCoverUri) }} 
                     style={{ width: '100%', height: '100%' }}
+                    cachePolicy="memory-disk"
+                    transition={200}
                   />
                 ) : (
                    <Music size={40} color={TOKENS.primary} opacity={0.3} />
@@ -182,7 +201,11 @@ export default function PlaylistDetail() {
 
              <View className="flex-row items-center justify-between w-full mt-2">
                 <TouchableOpacity 
-                  onPress={() => setAddModalVisible(true)}
+                  onPress={() => {
+                    haptics.impactLight();
+                    setAddModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
                   style={{ backgroundColor: TOKENS.surfaceHigh, height: 40, paddingHorizontal: 16, borderRadius: 20 }}
                   className="flex-row items-center"
                 >
@@ -193,6 +216,7 @@ export default function PlaylistDetail() {
                  <View className="flex-row items-center gap-2">
                     <TouchableOpacity 
                       onPress={handlePlayAll}
+                      activeOpacity={0.85}
                       style={{ 
                         backgroundColor: TOKENS.primary,
                         width: 40,
@@ -207,6 +231,7 @@ export default function PlaylistDetail() {
 
                     <TouchableOpacity 
                       onPress={handleShufflePlay}
+                      activeOpacity={0.85}
                       style={{ 
                         backgroundColor: TOKENS.surfaceHigh,
                         width: 40,
@@ -232,7 +257,10 @@ export default function PlaylistDetail() {
                   <Text style={{ color: TOKENS.onSurfaceVariant, letterSpacing: 4 }} className="font-black uppercase text-[10px] mb-8">Empty Playlist</Text>
                   
                   <TouchableOpacity 
-                    onPress={() => setAddModalVisible(true)}
+                    onPress={() => {
+                      haptics.impactLight();
+                      setAddModalVisible(true);
+                    }}
                     style={{ borderWidth: 2, borderColor: TOKENS.primary + '20' }}
                     className="px-8 py-4 rounded-full"
                   >
@@ -245,14 +273,20 @@ export default function PlaylistDetail() {
                  return (
                    <TouchableOpacity 
                      key={track.id}
-                     onPress={() => playTrack(track, playlistSongs)}
+                     onPress={() => handleTrackPress(track)}
+                     activeOpacity={0.7}
                      className="flex-row items-center mb-6"
                    >
                       <View className="w-8">
                          <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-xs font-black opacity-30">{index + 1}</Text>
                       </View>
                       <View style={{ backgroundColor: TOKENS.surfaceLow }} className="w-12 h-12 rounded-xl overflow-hidden mr-4">
-                         <Image source={{ uri: resolveLocalPath(track.localCoverUri) }} style={{ width: '100%', height: '100%' }} />
+                         <Image 
+                           source={{ uri: resolveLocalPath(track.localCoverUri) }} 
+                           style={{ width: '100%', height: '100%' }}
+                           cachePolicy="memory-disk"
+                           transition={200}
+                         />
                          {isActive && (
                             <View className="absolute inset-0 bg-black/40 items-center justify-center">
                                <AudioLines size={20} color={TOKENS.primary} />
@@ -289,3 +323,4 @@ export default function PlaylistDetail() {
     </View>
   );
 }
+

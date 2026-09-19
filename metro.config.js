@@ -23,7 +23,7 @@ config.resolver = {
 };
 
 const LOCAL_BACKEND_URL = "http://localhost:3000";
-const PROXY_PREFIXES = ["/api", "/songs"];
+const PROXY_PREFIXES = ["/api", "/songs", "/music", "/media", "/audio"];
 
 function proxyToBackend(req, res) {
   const targetUrl = new URL(req.url, LOCAL_BACKEND_URL);

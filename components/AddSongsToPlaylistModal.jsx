@@ -1,10 +1,11 @@
- import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { Search, Plus, Minus, Disc } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useSync } from '../context/SyncContext';
 import { useAuth } from '../context/AuthContext';
 import SonicSheet from './SonicSheet';
+import { haptics } from '../utils/haptics';
 
 const TOKENS = {
   surfaceLow: '#111412',
@@ -32,6 +33,7 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
 
   const toggleSong = async (songId) => {
     if (loadingIds.has(songId)) return;
+    haptics.impactLight();
     
     setLoadingIds(prev => new Set(prev).add(songId));
     const isAdded = currentSongIds.includes(songId);
@@ -50,6 +52,7 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
       });
 
       if (response.ok) {
+        haptics.notificationSuccess();
         onSongsUpdated?.();
       }
     } catch (error) {
@@ -64,6 +67,7 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
   };
 
   const handleLoadMore = () => {
+    haptics.impactLight();
     setDisplayLimit(prev => prev + 10);
   };
 
@@ -106,7 +110,12 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
                 >
                   <View style={{ backgroundColor: TOKENS.surfaceLow }} className="w-12 h-12 rounded-xl overflow-hidden mr-4 shadow-sm">
                     {song.localCoverUri ? (
-                      <Image source={{ uri: resolveLocalPath(song.localCoverUri) }} style={{ width: '100%', height: '100%' }} />
+                      <Image 
+                        source={{ uri: resolveLocalPath(song.localCoverUri) }} 
+                        style={{ width: '100%', height: '100%' }}
+                        cachePolicy="memory-disk"
+                        transition={200}
+                      />
                     ) : (
                       <View className="flex-1 items-center justify-center opacity-20">
                         <Disc size={20} color={TOKENS.primary} />
@@ -129,6 +138,7 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
                   <TouchableOpacity 
                     onPress={() => toggleSong(song.id)}
                     disabled={isLoading}
+                    activeOpacity={0.7}
                     style={{ 
                       backgroundColor: isAdded ? TOKENS.primary + '15' : TOKENS.surfaceHigh,
                       width: 40,
@@ -153,6 +163,7 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
             {hasMore && (
               <TouchableOpacity 
                 onPress={handleLoadMore}
+                activeOpacity={0.8}
                 style={{ backgroundColor: TOKENS.surfaceHigh }}
                 className="py-4 rounded-[20px] items-center justify-center mt-4 mb-20"
               >
@@ -177,3 +188,4 @@ export default function AddSongsToPlaylistModal({ visible, onClose, playlistId, 
     </SonicSheet>
   );
 }
+

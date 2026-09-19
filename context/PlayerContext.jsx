@@ -399,7 +399,8 @@ export function PlayerProvider({ children }) {
   return (
     <PlayerContext.Provider value={{
       currentTrack, isPlaying: status.playing, playbackStatus: status,
-      playTrack, togglePlayback, playNext, playPrevious, seekTo,
+      playTrack, togglePlayback, pauseTrack: () => player.pause(), resumeTrack: () => player.play(),
+      playNext, playPrevious, seekTo,
       queue, repeatMode, toggleRepeatMode, shuffleMode, toggleShuffleMode,
       addToQueue, playNextTrack, removeFromQueue, isExpanded, expandPlayer, collapsePlayer,
     }}>

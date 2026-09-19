@@ -40,9 +40,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const validateSession = async (sid) => {
+    const token = sid || sessionId;
+    if (!token) return;
     try {
       const response = await fetch(`${API_URL}/me`, {
-        headers: { 'Authorization': `Bearer ${sid}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const userData = await response.json();

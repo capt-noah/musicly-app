@@ -1,10 +1,20 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Shield, Bell, Music, Sliders, Repeat, Database, Download, Info, ExternalLink, ChevronRight } from 'lucide-react-native';
-
+import { ArrowLeft, Shield, Bell, Music, Sliders, Repeat, ChevronRight } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
+import { haptics } from '../utils/haptics';
 
 export default function Settings({ onBack }) {
+  const router = useRouter();
+  const { logout } = useAuth();
+  const handleBack = () => {
+    haptics.impactLight();
+    if (onBack) onBack();
+    else router.back();
+  };
+
   const sections = [
     {
       title: 'Account',
@@ -27,7 +37,7 @@ export default function Settings({ onBack }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0f0d' }}>
       <View className="flex-row items-center px-6 py-6 border-b border-[#43494411]">
-         <TouchableOpacity onPress={onBack} className="mr-4">
+         <TouchableOpacity onPress={handleBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="mr-4">
             <ArrowLeft size={24} color="#b9cbba" />
          </TouchableOpacity>
          <Text className="text-[#b9cbba] text-lg font-bold tracking-tight">Settings</Text>
@@ -41,7 +51,12 @@ export default function Settings({ onBack }) {
              </Text>
              <View className="bg-[#111412] rounded-[2rem] overflow-hidden border border-[#43494411]">
                 {section.items.map((item, idx) => (
-                  <TouchableOpacity key={idx} className="flex-row items-center justify-between px-5 py-5 border-b border-[#43494408]">
+                  <TouchableOpacity 
+                    key={idx} 
+                    onPress={() => haptics.selection()}
+                    activeOpacity={0.7}
+                    className="flex-row items-center justify-between px-5 py-5 border-b border-[#43494408]"
+                  >
                      <View className="flex-row items-center flex-1">
                         <View className="w-10 h-10 rounded-full bg-[#1c211d] items-center justify-center mr-4">
                            <item.icon size={18} color="#b9cbba" />
@@ -52,7 +67,12 @@ export default function Settings({ onBack }) {
                         </View>
                      </View>
                      {item.isSwitch ? (
-                        <Switch trackColor={{ false: '#1c211d', true: '#3b4b3e' }} thumbColor="#b9cbba" value={true} />
+                        <Switch 
+                          trackColor={{ false: '#1c211d', true: '#3b4b3e' }} 
+                          thumbColor="#b9cbba" 
+                          value={true} 
+                          onValueChange={() => haptics.selection()}
+                        />
                      ) : (
                         <ChevronRight size={18} color="#434944" />
                      )}
@@ -62,7 +82,14 @@ export default function Settings({ onBack }) {
           </View>
         ))}
 
-        <TouchableOpacity className="w-full py-5 bg-[#171b17] border border-[#ee7d7711] rounded-full items-center mb-8">
+        <TouchableOpacity 
+          onPress={() => {
+            haptics.impactLight();
+            logout();
+          }}
+          activeOpacity={0.8}
+          className="w-full py-5 bg-[#171b17] border border-[#ee7d7711] rounded-full items-center mb-8"
+        >
            <Text className="text-[#ee7d77] font-bold">Log Out</Text>
         </TouchableOpacity>
         
@@ -73,3 +100,4 @@ export default function Settings({ onBack }) {
     </SafeAreaView>
   );
 }
+

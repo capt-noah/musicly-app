@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSync } from '../../context/SyncContext';
 import ConnectTelegramModal from '../../components/ConnectTelegramModal';
 import WrapSheet from '../../components/WrapSheet';
+import { haptics } from '../../utils/haptics';
 
 // Sonic Atelier Design Tokens
 const TOKENS = {
@@ -23,16 +24,16 @@ const TOKENS = {
 
 export default function Profile() {
   const { user, logout, API_URL, BASE_URL, sessionId, refreshUser } = useAuth();
-  const { downloadedSongs, syncing, syncMusic, localProfilePhoto, resolveLocalPath, syncProfilePhoto } = useSync();
+  const { downloadedSongs, syncing, syncMusic, localProfilePhoto, resolveLocalPath } = useSync();
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [wrapVisible, setWrapVisible] = useState(false);
-  const [wrapRange, setWrapRange] = useState('Weekly'); // 'Daily' | 'Weekly' | 'Monthly'
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
+    haptics.impactLight();
     setIsRefreshing(true);
     try {
       await syncMusic();
@@ -43,6 +44,7 @@ export default function Profile() {
   };
 
   const pickImage = async () => {
+    haptics.impactLight();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       alert('Sorry, we need camera roll permissions to make this work!');
@@ -71,9 +73,8 @@ export default function Profile() {
         });
         
         if (response.ok) {
+          haptics.notificationSuccess();
           await refreshUser(sessionId);
-          // syncProfilePhoto will be triggered by useEffect in SyncContext 
-          // because user.profilePhoto will change in AuthContext
         } else {
           alert('Failed to upload image');
         }
@@ -98,9 +99,13 @@ export default function Profile() {
         <View className="py-6 mb-2 flex-row justify-between items-center">
            <Text style={{ color: TOKENS.tertiary, letterSpacing: -1.5 }} className="text-4xl font-black">Profile</Text>
            <TouchableOpacity 
-             onPress={() => router.push('/settings')} 
+             onPress={() => {
+               haptics.impactLight();
+               router.push('/settings');
+             }} 
              style={{ backgroundColor: TOKENS.surfaceHigh }}
              className="w-11 h-11 rounded-full items-center justify-center"
+             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
            >
               <SettingsIcon size={18} color={TOKENS.primary} strokeWidth={2} />
            </TouchableOpacity>
@@ -125,6 +130,8 @@ export default function Profile() {
                    source={{ uri: localProfilePhoto ? resolveLocalPath(localProfilePhoto) : (user?.profilePhoto?.startsWith('/') ? `${BASE_URL}${user.profilePhoto}` : (user?.profilePhoto || `https://ui-avatars.com/api/?name=${user?.firstName || 'User'}&background=1c211d&color=b9cbba`)) }} 
                    style={{ width: '100%', height: '100%', opacity: uploading ? 0.5 : 1 }}
                    contentFit="cover"
+                   cachePolicy="memory-disk"
+                   transition={200}
                  />
               </TouchableOpacity>
               <TouchableOpacity 
@@ -145,13 +152,19 @@ export default function Profile() {
         <View className="mb-12">
           <View className="flex-row items-center justify-between mb-6">
             <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-black uppercase tracking-[0.25rem] opacity-60">Musicly Wrap</Text>
-            <TouchableOpacity onPress={() => setWrapVisible(true)}>
+            <TouchableOpacity onPress={() => {
+              haptics.impactLight();
+              setWrapVisible(true);
+            }}>
                <Text style={{ color: TOKENS.primary }} className="text-[9px] font-black uppercase tracking-widest opacity-80">View Details</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity 
-            onPress={() => setWrapVisible(true)}
+            onPress={() => {
+              haptics.impactLight();
+              setWrapVisible(true);
+            }}
             activeOpacity={0.9}
             style={{ backgroundColor: TOKENS.surfaceLow }} 
             className="p-8 rounded-[48px] overflow-hidden"
@@ -177,6 +190,8 @@ export default function Profile() {
                      <Image 
                        source={{ uri: topTrack ? resolveLocalPath(topTrack.localCoverUri) : null }} 
                        style={{ width: '100%', height: '100%' }}
+                       cachePolicy="memory-disk"
+                       transition={200}
                      />
                   </View>
                   <View className="flex-1 mr-2">
@@ -196,9 +211,13 @@ export default function Profile() {
 
         <Text style={{ color: TOKENS.onSurfaceVariant }} className="text-[10px] font-black uppercase tracking-[0.25rem] mb-6 opacity-60">Accounts</Text>
         <TouchableOpacity 
-          onPress={() => setModalVisible(true)}
+          onPress={() => {
+            haptics.impactLight();
+            setModalVisible(true);
+          }}
           style={{ backgroundColor: TOKENS.surfaceLow }}
           className="p-7 rounded-[40px] mb-12 flex-row items-center justify-between"
+          activeOpacity={0.8}
         >
           <View className="flex-row items-center">
             <View style={{ backgroundColor: TOKENS.surfaceHigh }} className="p-4 rounded-[22px] mr-5">
@@ -224,7 +243,11 @@ export default function Profile() {
            ].map((item, index) => (
              <TouchableOpacity 
                key={index} 
-               onPress={item.action}
+               onPress={() => {
+                 haptics.selection();
+                 item.action?.();
+               }}
+               activeOpacity={0.7}
                className="flex-row items-center justify-between px-8 py-6"
              >
                 <View className="flex-row items-center">
@@ -254,3 +277,4 @@ export default function Profile() {
     </SafeAreaView>
   );
 }
+
