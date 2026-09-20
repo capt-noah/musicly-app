@@ -255,19 +255,24 @@ export default function Library() {
   const albums = useMemo(() => {
     const albumMap = {};
     songsArray.forEach(song => {
-      const groupingKey = song.albumId || `${(song.albumTitle || 'Unknown Album').toLowerCase().trim()}_${(song.artistName || 'Unknown Artist').toLowerCase().trim()}`;
-      const albumTitle = song.albumTitle || 'Unknown Album';
-      const artistName = song.artistName || 'Unknown Artist';
+      const albumTitle = song.albumTitle?.trim() || 'Standalone Tracks';
+      const artistName = song.artistName?.trim() || 'Unknown Artist';
+      const groupingKey = song.albumId 
+        ? `db-${song.albumId}` 
+        : `${albumTitle.toLowerCase()}___${artistName.toLowerCase()}`;
 
       if (!albumMap[groupingKey]) {
         albumMap[groupingKey] = { 
-          id: groupingKey,
+          id: song.albumId || groupingKey,
           title: albumTitle, 
           artist: artistName, 
-          cover: song.localCoverUri, 
+          cover: song.localCoverUri || null, 
           count: 0,
           plays: 0
         };
+      }
+      if (!albumMap[groupingKey].cover && song.localCoverUri) {
+        albumMap[groupingKey].cover = song.localCoverUri;
       }
       albumMap[groupingKey].count++;
       albumMap[groupingKey].plays += (song.plays || 0);
