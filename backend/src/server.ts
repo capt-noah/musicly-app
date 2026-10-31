@@ -41,15 +41,78 @@ app.use('/', mediaRoutes);
 import fs from 'fs';
 import path from 'path';
 
-// Serve static iOS / public assets
-const publicDir = path.resolve(process.cwd(), 'public');
-if (fs.existsSync(publicDir)) {
-  app.use(express.static(publicDir));
+// Serve static iOS / public assets across all possible root directories
+const candidatePublicDirs = [
+  path.resolve(process.cwd(), 'backend/public'),
+  path.resolve(process.cwd(), 'public'),
+  path.resolve(__dirname, '../public'),
+  path.resolve(__dirname, '../../public'),
+];
+
+for (const dir of candidatePublicDirs) {
+  if (fs.existsSync(dir)) {
+    app.use(express.static(dir));
+  }
 }
+
+// Dedicated handler for app icons (/icon.png and /images/icon.png)
+app.get(['/icon.png', '/images/icon.png'], (_req, res) => {
+  const iconCandidates = [
+    path.resolve(process.cwd(), 'backend/public/images/icon.png'),
+    path.resolve(process.cwd(), 'backend/public/icon.png'),
+    path.resolve(process.cwd(), 'public/images/icon.png'),
+    path.resolve(process.cwd(), 'public/icon.png'),
+    path.resolve(process.cwd(), 'assets/images/icon.png'),
+    path.resolve(__dirname, '../public/images/icon.png'),
+    path.resolve(__dirname, '../public/icon.png'),
+  ];
+  for (const ic of iconCandidates) {
+    if (fs.existsSync(ic)) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return fs.createReadStream(ic).pipe(res);
+    }
+  }
+  res.status(404).send('Icon not found');
+});
+
+// Dedicated handler for signed Enterprise IPA
+app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa'], (_req, res) => {
+  const ipaCandidates = [
+    path.resolve(process.cwd(), 'backend/public/ios/Tone-Enterprise.ipa'),
+    path.resolve(process.cwd(), 'public/ios/Tone-Enterprise.ipa'),
+    path.resolve(__dirname, '../public/ios/Tone-Enterprise.ipa'),
+  ];
+  for (const ipa of ipaCandidates) {
+    if (fs.existsSync(ipa)) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment; filename="Tone-Enterprise.ipa"');
+      return fs.createReadStream(ipa).pipe(res);
+    }
+  }
+  res.status(404).send('IPA not found');
+});
+
+// Dedicated handler for antirevoke profile with Apple MIME type
+app.get(['/ios/antirevoke.mobileconfig'], (_req, res) => {
+  const configCandidates = [
+    path.resolve(process.cwd(), 'backend/public/ios/antirevoke.mobileconfig'),
+    path.resolve(process.cwd(), 'public/ios/antirevoke.mobileconfig'),
+    path.resolve(__dirname, '../public/ios/antirevoke.mobileconfig'),
+  ];
+  for (const cfg of configCandidates) {
+    if (fs.existsSync(cfg)) {
+      res.setHeader('Content-Type', 'application/x-apple-aspen-config');
+      res.setHeader('Content-Disposition', 'attachment; filename="antirevoke.mobileconfig"');
+      return fs.createReadStream(cfg).pipe(res);
+    }
+  }
+  res.status(404).send('Profile not found');
+});
 
 // Dynamic manifest.plist endpoint for iOS OTA
 app.get('/ios/manifest.plist', (req, res) => {
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'musicly-4l0y.onrender.com';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'tone-web-dghw.onrender.com';
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
   const baseUrl = `${proto}://${host}`;
 
@@ -88,7 +151,7 @@ app.get('/ios/manifest.plist', (req, res) => {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>com.musicly.ios</string>
+                <string>com.gto.supposetv.ent</string>
                 <key>bundle-version</key>
                 <string>1.0.0</string>
                 <key>kind</key>
