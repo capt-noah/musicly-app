@@ -1,22 +1,28 @@
 {
-  "name": "musicly-backend",
-  "version": "1.0.0",
-  "description": "Backend for Musicly React Native App",
+  "name": "tone-backend",
+  "version": "2.0.0",
+  "description": "Backend API for Tone — Private Offline Audio Sanctuary",
   "module": "src/server.ts",
   "type": "module",
   "scripts": {
-    "dev": "bun src/server.ts",
-    "build": "bunx tsc -p tsconfig.json",
-    "start": "bun src/server.ts",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.12.7",
+    "@types/node-fetch": "^2.6.11",
+    "@types/node-telegram-bot-api": "^0.64.6",
     "bcrypt": "^5.1.1",
     "colorthief": "^2.0.2",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.21.4",
     "drizzle-orm": "^0.30.9",
     "expo": "~54.0.33",
     "express": "^4.19.2",
@@ -26,16 +32,9 @@
     "postgres": "^3.4.4",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "ts-node": "^10.9.2"
-  },
-  "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
-    "@types/cookie-parser": "^1.4.7",
-    "@types/cors": "^2.8.17",
-    "@types/node": "^20.12.7",
-    "@types/node-fetch": "^2.6.11",
-    "@types/node-telegram-bot-api": "^0.64.6",
-    "drizzle-kit": "^0.21.4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "^5.4.5"
-  }
+  },
+  "devDependencies": {}
 }
