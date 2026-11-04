@@ -112,7 +112,7 @@ app.get(['/ios/antirevoke.mobileconfig'], (_req, res) => {
 
 // Dynamic manifest.plist endpoint for iOS OTA
 app.get('/ios/manifest.plist', (req, res) => {
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'tone-web-dghw.onrender.com';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'musicly-4l0y.onrender.com';
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
   const baseUrl = `${proto}://${host}`;
 
