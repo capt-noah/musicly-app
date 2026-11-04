@@ -9,6 +9,7 @@ import mediaRoutes from './routes/media.routes';
 import telegramRoutes from './routes/telegram.routes';
 import playerRoutes from './routes/player.routes';
 import interactionsRoutes from './routes/interactions.routes';
+import { botUsername } from './config';
 
 const app = express();
 
@@ -40,6 +41,10 @@ app.use('/', mediaRoutes);
 // Over-The-Air iOS & Android Distribution
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Serve static iOS / public assets across all possible root directories
 const candidatePublicDirs = [
@@ -283,8 +288,14 @@ app.get(['/download/musicly.apk', '/download/tone.apk'], (req, res) => {
 </html>`);
 });
 
-app.get('/', (req, res) => {
-  res.send('Musicly Backend API (TypeScript + Drizzle + Manual Sessions)');
+app.get('/', (_req, res) => {
+  res.json({
+    app: "Tone Backend API",
+    version: "2.0.0",
+    engine: "TypeScript + Drizzle + Timing-Safe Auth",
+    bot: `@${botUsername}`,
+    status: "operational"
+  });
 });
 
 // Initialize Telegram Bot services
