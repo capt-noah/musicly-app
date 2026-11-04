@@ -19,11 +19,21 @@ export function generateLinkToken(userId: string): string {
 
 /**
  * Finds a userId by token and consumes (deletes) it.
+ * Resilient to casing and whitespace.
  */
 export function consumeLinkToken(token: string): string | null {
-  const userId = tokenMap.get(token);
+  const normalized = token.trim();
+  let userId = tokenMap.get(normalized);
+  if (!userId) {
+    userId = tokenMap.get(normalized.toUpperCase());
+  }
+  if (!userId) {
+    userId = tokenMap.get(normalized.toLowerCase());
+  }
   if (userId) {
-    tokenMap.delete(token);
+    tokenMap.delete(normalized);
+    tokenMap.delete(normalized.toUpperCase());
+    tokenMap.delete(normalized.toLowerCase());
     return userId;
   }
   return null;

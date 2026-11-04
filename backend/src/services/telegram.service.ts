@@ -13,9 +13,12 @@ export function initTelegramBot() {
   if (isBotInitialized) return;
   isBotInitialized = true;
 
-  bot.onText(/\/start( (.+))?/, async (msg, match) => {
+  // Support /start <token>, /start link_<token>, /link <token>, /link link_<token>
+  bot.onText(/\/(start|link)( (.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
-    const token = match?.[2];
+    const command = match?.[1]?.toLowerCase();
+    const rawParam = match?.[3]?.trim();
+    const token = rawParam?.replace(/^link_/i, '').trim();
 
     if (token) {
       // Handle account linking
@@ -25,10 +28,12 @@ export function initTelegramBot() {
         try {
           let profilePhotoUrl: string | null = null;
           try {
-            const photos = await bot.getUserProfilePhotos(msg.from!.id);
-            if (photos.total_count > 0) {
-              const fileId = photos.photos[0][photos.photos[0].length - 1].file_id;
-              profilePhotoUrl = `/media/${fileId}`;
+            const photos = await bot.getUserProfilePhotos(msg.from!.id, { limit: 1 });
+            if (photos.total_count > 0 && photos.photos.length > 0 && photos.photos[0].length > 0) {
+              const photoSizes = photos.photos[0];
+              // Pick highest resolution size
+              const largest = photoSizes[photoSizes.length - 1];
+              profilePhotoUrl = `/media/${largest.file_id}`;
             }
           } catch (photoErr) {
             console.warn('[ToneBot] Failed to fetch profile photos:', photoErr);
@@ -38,20 +43,55 @@ export function initTelegramBot() {
           console.log(`[ToneBot] Linked user ${userId} to Telegram ${msg.from!.id}. Photo: ${profilePhotoUrl}`);
           bot.sendMessage(
             chatId,
-            "✅ Your Tone account has been successfully linked!\n\nYou can now send high-fidelity audio files or lossless documents here, and they will immediately sync to your private sanctuary."
+            "✅ Your Tone account has been linked!\n\nSend music tracks here to automatically sync them to your Tone library."
           );
+          return;
         } catch (error) {
-          bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new link token in the Tone app.");
+          console.error('[ToneBot] Link account error:', error);
+          bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new link code in the Tone app.");
+          return;
         }
       } else {
-        bot.sendMessage(chatId, "❌ Invalid or expired token. Please generate a new one in the Profile section of the Tone app.");
+        bot.sendMessage(chatId, "❌ Invalid or expired code. Please generate a new link code in the Profile section of the Tone app.");
+        return;
       }
-    } else {
-      // Standard welcome for new users
+    }
+
+    if (command === 'link') {
       bot.sendMessage(
         chatId,
-        "Welcome to Tone! 🎵\n\nYour sanctuary for high-fidelity offline audio.\n\nTo link your account, open the Tone app on iOS or macOS, navigate to Profile, and tap 'Sync via Telegram Bot'."
+        "To link your account, send: `/link <code>` (generate your code in the Tone app Profile).",
+        { parse_mode: 'Markdown' }
       );
+      return;
+    }
+
+    // Standard welcome for new users
+    bot.sendMessage(
+      chatId,
+      "Welcome to Tone! 🎵\n\nTo link your account, open the Tone app on iOS or macOS, navigate to Profile, and tap 'Connect Telegram Bot'."
+    );
+  });
+
+  bot.onText(/\/help/, (msg) => {
+    bot.sendMessage(
+      msg.chat.id,
+      "🎵 *Tone Sync Bot*\n\nSend music audio files (MP3, FLAC, M4A, WAV, AAC) directly to this chat.\nThey will automatically sync to your Tone library on all your devices.",
+      { parse_mode: 'Markdown' }
+    );
+  });
+
+  bot.onText(/\/status/, async (msg) => {
+    if (!msg.from) return;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.telegramId, msg.from.id.toString())).limit(1);
+      if (user) {
+        bot.sendMessage(msg.chat.id, `✅ Linked to Tone account: *${user.username}*`, { parse_mode: 'Markdown' });
+      } else {
+        bot.sendMessage(msg.chat.id, "❌ Not linked. Open the Tone app, navigate to Profile, and tap 'Connect Telegram Bot'.", { parse_mode: 'Markdown' });
+      }
+    } catch (err: any) {
+      bot.sendMessage(msg.chat.id, "❌ Could not retrieve status. Please try again later.");
     }
   });
 
@@ -62,7 +102,7 @@ export function initTelegramBot() {
 
       if (user) {
         await enqueueMusic(user.id, fileId, coverFileId, title || 'Untitled', audioPayload);
-        bot.sendMessage(msg.chat.id, `📥 Added "${title || 'Untitled'}" to your Tone sync queue. It will appear in your sanctuary shortly!`);
+        bot.sendMessage(msg.chat.id, `📥 Added "${title || 'Untitled'}" to your Tone sync queue. It will appear in your library shortly!`);
         notifyWorker();
       } else {
         bot.sendMessage(msg.chat.id, "❌ Your Telegram account is not linked to Tone. Please link it in the Tone app profile first.");
