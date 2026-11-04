@@ -9,6 +9,7 @@ import mediaRoutes from './routes/media.routes';
 import telegramRoutes from './routes/telegram.routes';
 import playerRoutes from './routes/player.routes';
 import interactionsRoutes from './routes/interactions.routes';
+import matchRoutes from './routes/match.routes';
 import { botUsername } from './config';
 
 const app = express();
@@ -17,7 +18,8 @@ const app = express();
 // No local storage used on server disk to prevent filling up storage
 
 // Express Config
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.raw({ type: ['application/octet-stream', 'audio/*'], limit: '20mb' }));
 app.use(cookieParser());
 app.use(cors({
   origin: true,
@@ -28,6 +30,7 @@ app.use(cors({
 
 // Routes
 app.use('/api', authRoutes);
+app.use('/api/match', matchRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/interactions', interactionsRoutes);
 app.use('/music', songsRoutes);
