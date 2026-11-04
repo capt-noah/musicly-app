@@ -6,7 +6,11 @@ import { db } from '../db';
 import { music } from '../schema';
 import { eq } from 'drizzle-orm';
 
+import fs from 'fs';
+import path from 'path';
+
 const router = Router();
+const STORAGE_DIR = path.resolve(__dirname, '../../storage/tracks');
 
 // In-memory LRU cover cache (holds extracted high-res covers in memory)
 const coverCache = new Map<string, { buffer: Buffer; contentType: string }>();
@@ -169,10 +173,46 @@ const handleCoverExtraction = async (req: any, res: any) => {
 router.get('/media/cover/:file_id', handleCoverExtraction);
 router.get('/cover/:file_id', handleCoverExtraction);
 
-// Stream audio directly from Telegram to client with HTTP Range support
+// Stream audio directly from local server storage or Telegram to client with HTTP Range support
 const handleAudioStream = async (req: any, res: any) => {
+  const fileId = req.params.file_id;
+  if (!fileId) return res.status(400).json({ error: 'Missing file_id' });
+
+  // 1. Check if file is stored locally in backend/storage/tracks
+  const localFilePath = path.join(STORAGE_DIR, `${fileId.replace(/\.mp3$/, '')}.mp3`);
+  if (fs.existsSync(localFilePath)) {
+    try {
+      const stat = fs.statSync(localFilePath);
+      const totalSize = stat.size;
+      const range = req.headers.range;
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunkSize = (end - start) + 1;
+
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+        res.setHeader('Content-Length', chunkSize);
+        fs.createReadStream(localFilePath, { start, end }).pipe(res);
+      } else {
+        res.status(200);
+        res.setHeader('Content-Length', totalSize);
+        fs.createReadStream(localFilePath).pipe(res);
+      }
+      return;
+    } catch (localErr: any) {
+      console.error('[AudioProxy] Local file stream error:', localErr);
+    }
+  }
+
+  // 2. Otherwise stream from Telegram
   try {
-    const file = await bot.getFile(req.params.file_id);
+    const file = await bot.getFile(fileId);
     if (!file.file_path) {
       return res.status(404).json({ error: 'Audio file path not found on Telegram' });
     }

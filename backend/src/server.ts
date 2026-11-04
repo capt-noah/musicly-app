@@ -10,6 +10,7 @@ import telegramRoutes from './routes/telegram.routes';
 import playerRoutes from './routes/player.routes';
 import interactionsRoutes from './routes/interactions.routes';
 import matchRoutes from './routes/match.routes';
+import deezerRoutes from './routes/deezer.routes';
 import { botUsername } from './config';
 
 const app = express();
@@ -37,6 +38,8 @@ app.use('/music', songsRoutes);
 app.use('/songs', songsRoutes);
 app.use('/api/songs', songsRoutes);
 app.use('/api/music', songsRoutes);
+app.use('/api/music', deezerRoutes);
+app.use('/api/deezer', deezerRoutes);
 app.use('/api/playlists', playlistsRoutes);
 app.use('/api/player', playerRoutes);
 app.use('/', mediaRoutes);
