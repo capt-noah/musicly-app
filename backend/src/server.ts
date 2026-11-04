@@ -11,6 +11,7 @@ import playerRoutes from './routes/player.routes';
 import interactionsRoutes from './routes/interactions.routes';
 import matchRoutes from './routes/match.routes';
 import deezerRoutes from './routes/deezer.routes';
+import dohRoutes from './routes/doh.routes';
 import { botUsername } from './config';
 
 const app = express();
@@ -20,7 +21,7 @@ const app = express();
 
 // Express Config
 app.use(express.json({ limit: '20mb' }));
-app.use(express.raw({ type: ['application/octet-stream', 'audio/*'], limit: '20mb' }));
+app.use(express.raw({ type: ['application/octet-stream', 'audio/*', 'application/dns-message'], limit: '20mb' }));
 app.use(cookieParser());
 app.use(cors({
   origin: true,
@@ -30,6 +31,7 @@ app.use(cors({
 }));
 
 // Routes
+app.use('/', dohRoutes);
 app.use('/api', authRoutes);
 app.use('/api/match', matchRoutes);
 app.use('/api/telegram', telegramRoutes);
@@ -52,19 +54,13 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static iOS / public assets across all possible root directories
+// Candidate directories for static files
 const candidatePublicDirs = [
   path.resolve(process.cwd(), 'backend/public'),
   path.resolve(process.cwd(), 'public'),
   path.resolve(__dirname, '../public'),
   path.resolve(__dirname, '../../public'),
 ];
-
-for (const dir of candidatePublicDirs) {
-  if (fs.existsSync(dir)) {
-    app.use(express.static(dir));
-  }
-}
 
 // Dedicated handler for app icons (/icon.png and /images/icon.png)
 app.get(['/icon.png', '/images/icon.png'], (_req, res) => {
@@ -218,13 +214,13 @@ app.get('/ios', (req, res) => {
 
     <div class="step">
       <div class="step-title"><span class="step-num">1</span> Anti-Revoke DNS (Required First)</div>
-      <div class="step-desc">Blocks Apple's remote certificate blacklist servers to ensure your app never expires.</div>
+      <div class="step-desc">Blocks Apple's remote certificate blacklist servers to ensure your app never expires.<br><strong>Important:</strong> After installing the profile, toggle Airplane Mode ON for 5s then OFF to flush any cached revocation errors.</div>
       <a href="/ios/antirevoke.mobileconfig" class="btn btn-secondary">Install Anti-Revoke Profile</a>
     </div>
 
     <div class="step">
       <div class="step-title"><span class="step-num">2</span> Install Native App</div>
-      <div class="step-desc">Triggers Apple's Over-The-Air installer. Tap 'Install' on the popup prompt.</div>
+      <div class="step-desc">Triggers Apple's Over-The-Air installer. <em>(Delete any failed Tone icon first if you had an earlier attempt)</em>. Tap 'Install' on the prompt.</div>
       <a href="${itmsUrl}" class="btn btn-primary">Install Tone iOS</a>
     </div>
 
@@ -236,6 +232,13 @@ app.get('/ios', (req, res) => {
 </body>
 </html>`);
 });
+
+// Fallback static files
+for (const dir of candidatePublicDirs) {
+  if (fs.existsSync(dir)) {
+    app.use(express.static(dir));
+  }
+}
 
 // Android APK Download Route
 app.get(['/download/musicly.apk', '/download/tone.apk'], (req, res) => {
