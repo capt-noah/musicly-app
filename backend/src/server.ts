@@ -75,6 +75,8 @@ app.get(['/icon.png', '/images/icon.png'], (_req, res) => {
   ];
   for (const ic of iconCandidates) {
     if (fs.existsSync(ic)) {
+      const stat = fs.statSync(ic);
+      res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       return fs.createReadStream(ic).pipe(res);
@@ -92,6 +94,8 @@ app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa'], (_req, re
   ];
   for (const ipa of ipaCandidates) {
     if (fs.existsSync(ipa)) {
+      const stat = fs.statSync(ipa);
+      res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Disposition', 'attachment; filename="Tone-Enterprise.ipa"');
       return fs.createReadStream(ipa).pipe(res);
@@ -109,6 +113,8 @@ app.get(['/ios/antirevoke.mobileconfig'], (_req, res) => {
   ];
   for (const cfg of configCandidates) {
     if (fs.existsSync(cfg)) {
+      const stat = fs.statSync(cfg);
+      res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'application/x-apple-aspen-config');
       res.setHeader('Content-Disposition', 'attachment; filename="antirevoke.mobileconfig"');
       return fs.createReadStream(cfg).pipe(res);
