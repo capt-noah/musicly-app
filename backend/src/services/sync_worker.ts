@@ -1,5 +1,8 @@
 import { getNextBatch, updateSyncStatus } from './sync.service';
 import { saveMusic, findOrCreateArtist, findOrCreateAlbum } from './songs.service';
+import { bot } from '../config';
+import fetch from 'node-fetch';
+import { parseBuffer } from 'music-metadata';
 
 let isWorkerRunning = false;
 
@@ -42,23 +45,43 @@ async function startWorkerLoop() {
           
           const audioData = JSON.parse(item.audioData || '{}');
           
-          // --- Metadata Classification ---
-          let albumId: string | undefined = undefined;
-          let artistId: string | undefined = undefined;
-          
-          if (audioData.performer || audioData.album || audioData.title) {
-            const artistName = (audioData.performer || 'Unknown Artist').trim();
-            artistId = await findOrCreateArtist(artistName);
-            
-            // If no album metadata, group under 'Standalone Tracks'
-            let albumName = (audioData.album || 'Standalone Tracks').trim();
-            if (albumName.toLowerCase() === 'standalone tracks') {
-              albumName = 'Standalone Tracks';
+          let artistName = (audioData.performer || '').trim();
+          let albumName = (audioData.album || '').trim();
+          let songTitle = (audioData.title || '').trim();
+
+          // Inspect the actual audio file stream from Telegram to extract embedded ID3 tags (TALB, TPE1, TIT2)
+          try {
+            const fileLink = await bot.getFileLink(item.fileId);
+            const rangeRes = await fetch(fileLink, { headers: { Range: 'bytes=0-262143' } });
+            if (rangeRes.ok || rangeRes.status === 206) {
+              const audioBuf = await rangeRes.buffer();
+              const parsed = await parseBuffer(audioBuf);
+              if (parsed.common.album && parsed.common.album.trim().length > 0) {
+                albumName = parsed.common.album.trim();
+              }
+              if (parsed.common.artist && parsed.common.artist.trim().length > 0 && !artistName) {
+                artistName = parsed.common.artist.trim();
+              }
+              if (parsed.common.title && parsed.common.title.trim().length > 0 && !songTitle) {
+                songTitle = parsed.common.title.trim();
+              }
             }
-            
+          } catch (id3Err) {
+            console.warn(`[SyncWorker] Could not inspect ID3 tags for file ${item.fileId}:`, id3Err);
+          }
+
+          if (!artistName) artistName = 'Unknown Artist';
+          if (!songTitle) songTitle = 'Untitled';
+          audioData.title = songTitle;
+          audioData.performer = artistName;
+
+          const artistId = await findOrCreateArtist(artistName);
+          let albumId: string | undefined = undefined;
+
+          // Only assign an album if legitimate album metadata is present
+          if (albumName && albumName.toLowerCase() !== 'standalone tracks' && albumName.toLowerCase() !== 'single') {
             albumId = await findOrCreateAlbum(albumName, artistId, item.coverId || undefined);
           }
-          // -------------------------------
 
           await saveMusic(
             item.userId!,

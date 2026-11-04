@@ -1,12 +1,13 @@
 import { Response, NextFunction } from 'express';
-import { findUserById } from '../services/auth.service';
-import { validateSession } from '../services/session.service';
+import { validateSessionWithUser } from '../services/session.service';
 
 /**
  * Middleware to authenticate requests using a custom session ID.
  * The session ID can be sent via:
- * 1. HttpOnly Cookie (session_id)
- * 2. Authorization Header (Bearer sessionId)
+ * 1. Authorization Header (Bearer <sessionId>)
+ * 2. HttpOnly Cookie (session_id)
+ *
+ * Optimized to use a single innerJoin query to fetch both session validity and user metadata.
  */
 export const authenticateSession = async (req: any, res: Response, next: NextFunction) => {
   let sessionId = req.cookies?.session_id;
@@ -14,11 +15,11 @@ export const authenticateSession = async (req: any, res: Response, next: NextFun
   if (!sessionId) {
     const authHeader = req.headers['authorization'];
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      sessionId = authHeader.split(' ')[1];
+      sessionId = authHeader.substring(7).trim();
     }
   }
 
-  // Handle case where multiple cookies/headers might be combined (some platforms join with commas)
+  // Handle case where multiple cookies/headers might be combined (e.g. comma-delimited)
   if (typeof sessionId === 'string' && sessionId.includes(',')) {
     sessionId = sessionId.split(',')[0].trim();
   }
@@ -28,23 +29,17 @@ export const authenticateSession = async (req: any, res: Response, next: NextFun
   }
 
   try {
-    const userId = await validateSession(sessionId);
+    const authResult = await validateSessionWithUser(sessionId);
 
-    if (!userId) {
+    if (!authResult) {
       return res.status(401).json({ error: 'Invalid or expired session' });
     }
 
-    const user = await findUserById(userId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    req.user = user;
-    req.sessionId = sessionId; // Attach session ID for logout etc.
+    req.user = authResult.user;
+    req.sessionId = sessionId;
     next();
   } catch (error: any) {
-    console.error('Auth Middleware Error:', error);
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    console.error('[AuthMiddleware] Error validating session:', error?.message || error);
+    return res.status(500).json({ error: 'Internal server error', details: error?.message });
   }
 };

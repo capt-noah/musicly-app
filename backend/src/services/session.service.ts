@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { sessions } from '../schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { sessions, users } from '../schema';
+import { eq, and, gt, lte } from 'drizzle-orm';
 
 /**
  * Creates a new session record in the database.
@@ -19,10 +19,37 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 /**
- * Validates if a session ID exists and is not expired.
+ * Validates if a session ID exists, is not expired, and returns the joined user record.
+ * SINGLE round-trip to database instead of two sequential queries.
+ */
+export async function validateSessionWithUser(sessionId: string) {
+  if (!sessionId || typeof sessionId !== 'string') return null;
+
+  const [result] = await db.select({
+    session: sessions,
+    user: users,
+  })
+  .from(sessions)
+  .innerJoin(users, eq(sessions.userId, users.id))
+  .where(
+    and(
+      eq(sessions.id, sessionId),
+      gt(sessions.expiresAt, new Date())
+    )
+  )
+  .limit(1);
+
+  if (!result) return null;
+  return result;
+}
+
+/**
+ * Validates if a session ID exists and is not expired (legacy compatibility).
  */
 export async function validateSession(sessionId: string): Promise<string | null> {
-  const [session] = await db.select()
+  if (!sessionId || typeof sessionId !== 'string') return null;
+
+  const [session] = await db.select({ userId: sessions.userId })
     .from(sessions)
     .where(
       and(
@@ -36,15 +63,25 @@ export async function validateSession(sessionId: string): Promise<string | null>
 }
 
 /**
- * Deletes a session record.
+ * Deletes a session record (Logout).
  */
 export async function destroySession(sessionId: string): Promise<void> {
+  if (!sessionId) return;
   await db.delete(sessions).where(eq(sessions.id, sessionId));
 }
 
 /**
- * Cleanup expired sessions (optional, can be run on cron).
+ * Deletes all sessions for a specific user (Logout everywhere / Password change).
  */
-export async function cleanupExpiredSessions(): Promise<void> {
-  // Implementation for periodic cleanup
+export async function destroyAllUserSessions(userId: string): Promise<void> {
+  if (!userId) return;
+  await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+/**
+ * Cleanup expired sessions from the database.
+ */
+export async function cleanupExpiredSessions(): Promise<number> {
+  const result = await db.delete(sessions).where(lte(sessions.expiresAt, new Date()));
+  return (result as any)?.count ?? 0;
 }

@@ -222,16 +222,17 @@ export async function updateSongMetadata(
     }
     
     const artistName = data.artistName || currentArtistName;
-    
-    // If no album title is provided, group under 'Standalone Tracks'
-    const albumTitle = (data.albumTitle && data.albumTitle.trim() !== '') 
-      ? data.albumTitle 
-      : 'Standalone Tracks';
-
-    console.log(`[Service] Regrouping: Artist="${artistName}", Album="${albumTitle}"`);
     const artistId = await findOrCreateArtist(artistName);
-    albumId = await findOrCreateAlbum(albumTitle, artistId, song.coverFileId || undefined);
-    console.log(`[Service] Assigned to Album ID: ${albumId}`);
+
+    const trimmedAlbum = (data.albumTitle || '').trim();
+    if (trimmedAlbum && trimmedAlbum.toLowerCase() !== 'standalone tracks' && trimmedAlbum.toLowerCase() !== 'single') {
+      console.log(`[Service] Regrouping: Artist="${artistName}", Album="${trimmedAlbum}"`);
+      albumId = await findOrCreateAlbum(trimmedAlbum, artistId, song.coverFileId || undefined);
+      console.log(`[Service] Assigned to Album ID: ${albumId}`);
+    } else {
+      console.log(`[Service] Setting as standalone single (albumId: null) for Artist="${artistName}"`);
+      albumId = null;
+    }
   }
 
   // 3. Apply updates

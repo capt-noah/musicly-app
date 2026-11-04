@@ -20,7 +20,7 @@ export function initTelegramBot() {
     if (token) {
       // Handle account linking
       const userId = consumeLinkToken(token);
-      
+
       if (userId) {
         try {
           let profilePhotoUrl: string | null = null;
@@ -31,21 +31,27 @@ export function initTelegramBot() {
               profilePhotoUrl = `/media/${fileId}`;
             }
           } catch (photoErr) {
-            console.warn('Failed to fetch profile photos:', photoErr);
+            console.warn('[ToneBot] Failed to fetch profile photos:', photoErr);
           }
 
           await linkTelegramToUser(userId, msg.from!.id.toString(), profilePhotoUrl);
-          console.log(`[TelegramBot] Linked user ${userId} to Telegram ${msg.from!.id}. Photo: ${profilePhotoUrl}`);
-          bot.sendMessage(chatId, "✅ Your Musicly account has been successfully linked! You can now send audio files here to add them to your library.");
+          console.log(`[ToneBot] Linked user ${userId} to Telegram ${msg.from!.id}. Photo: ${profilePhotoUrl}`);
+          bot.sendMessage(
+            chatId,
+            "✅ Your Tone account has been successfully linked!\n\nYou can now send high-fidelity audio files or lossless documents here, and they will immediately sync to your private sanctuary."
+          );
         } catch (error) {
-          bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new token in the app.");
+          bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new link token in the Tone app.");
         }
       } else {
-        bot.sendMessage(chatId, "❌ Invalid or expired token. Please generate a new one in the Profile section of the Musicly app.");
+        bot.sendMessage(chatId, "❌ Invalid or expired token. Please generate a new one in the Profile section of the Tone app.");
       }
     } else {
       // Standard welcome for new users
-      bot.sendMessage(chatId, "Welcome to Musicly! 🎵\n\nTo link your existing account, please go to the Profile section in the Musicly app and select 'Connect Telegram'.");
+      bot.sendMessage(
+        chatId,
+        "Welcome to Tone! 🎵\n\nYour sanctuary for high-fidelity offline audio.\n\nTo link your account, open the Tone app on iOS or macOS, navigate to Profile, and tap 'Sync via Telegram Bot'."
+      );
     }
   });
 
@@ -53,17 +59,17 @@ export function initTelegramBot() {
     if (!msg.from) return;
     try {
       const [user] = await db.select().from(users).where(eq(users.telegramId, msg.from.id.toString())).limit(1);
-      
+
       if (user) {
         await enqueueMusic(user.id, fileId, coverFileId, title || 'Untitled', audioPayload);
-        bot.sendMessage(msg.chat.id, `📥 Added "${title || 'Untitled'}" to your sync queue. It will appear in your library shortly!`);
+        bot.sendMessage(msg.chat.id, `📥 Added "${title || 'Untitled'}" to your Tone sync queue. It will appear in your sanctuary shortly!`);
         notifyWorker();
       } else {
-        bot.sendMessage(msg.chat.id, "❌ Your Telegram account is not linked to Musicly. Please link it in the app first.");
+        bot.sendMessage(msg.chat.id, "❌ Your Telegram account is not linked to Tone. Please link it in the Tone app profile first.");
       }
     } catch (error) {
-      console.error('Error adding music to queue:', error);
-      bot.sendMessage(msg.chat.id, '❌ Something went wrong adding your track. Please try again.');
+      console.error('[ToneBot] Error adding music to queue:', error);
+      bot.sendMessage(msg.chat.id, '❌ Something went wrong adding your track to Tone. Please try again.');
     }
   };
 
@@ -80,7 +86,7 @@ export function initTelegramBot() {
     const mime = (msg.document.mime_type || '').toLowerCase();
     const fileName = (msg.document.file_name || '').toLowerCase();
     const isAudioDoc = mime.startsWith('audio/') || /\.(mp3|m4a|flac|wav|aac|ogg|opus)$/i.test(fileName);
-    
+
     if (!isAudioDoc) return;
 
     const fileId = msg.document.file_id;
@@ -94,4 +100,3 @@ export function initTelegramBot() {
     });
   });
 }
-
