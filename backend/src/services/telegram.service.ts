@@ -114,6 +114,7 @@ export function initTelegramBot() {
   };
 
   bot.on('audio', async (msg) => {
+    if (msg.from?.is_bot) return; // Prevent bot echo loop
     if (!msg.audio) return;
     const audioFileId = msg.audio.file_id;
     const coverFileId = (msg.audio as any).thumbnail?.file_id ?? (msg.audio as any).thumb?.file_id ?? null;
@@ -122,6 +123,7 @@ export function initTelegramBot() {
   });
 
   bot.on('document', async (msg) => {
+    if (msg.from?.is_bot) return; // Prevent bot echo loop
     if (!msg.document) return;
     const mime = (msg.document.mime_type || '').toLowerCase();
     const fileName = (msg.document.file_name || '').toLowerCase();
