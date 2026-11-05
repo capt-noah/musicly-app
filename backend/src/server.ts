@@ -164,7 +164,7 @@ app.get('/ios/manifest.plist', (req, res) => {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>com.gto.supposetv.ent</string>
+                <string>com.shenmapower.mobileoadd</string>
                 <key>bundle-version</key>
                 <string>1.0.0</string>
                 <key>kind</key>
