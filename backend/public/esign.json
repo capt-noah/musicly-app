@@ -1,0 +1,30 @@
+{
+  "name": "Tone Official Source",
+  "identifier": "com.tone.source",
+  "sourceURL": "https://musicly-web.vercel.app/esign.json",
+  "apps": [
+    {
+      "name": "Tone",
+      "bundleIdentifier": "com.shenmapower.mobileoadd",
+      "developerName": "Tone Sanctuary",
+      "subtitle": "Lossless Music & Tone Mix",
+      "localizedDescription": "Native Swift iOS lossless music player featuring Tone Mix (AutoMix dual-deck crossfade), Tone Match Shazam recognition, offline caching, and Telegram synchronization.",
+      "iconURL": "https://musicly-4l0y.onrender.com/images/icon.png",
+      "tintColor": "b9cbba",
+      "downloadURL": "https://musicly-4l0y.onrender.com/ios/Tone.ipa",
+      "version": "1.0.0",
+      "versionDate": "2026-11-05T12:00:00Z",
+      "size": 36304784,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-11-05",
+          "downloadURL": "https://musicly-4l0y.onrender.com/ios/Tone.ipa",
+          "size": 36304784,
+          "minOSVersion": "16.0"
+        }
+      ]
+    }
+  ],
+  "news": []
+}
