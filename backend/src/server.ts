@@ -213,46 +213,50 @@ app.get('/ios', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tone iOS — Native Installation</title>
+  <title>Install Tone on iPhone</title>
   <style>
     body { background: #0d0f0d; color: #fff8f2; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; box-sizing: border-box; }
-    .card { background: #161c17; border: 1px solid rgba(185,203,186,0.25); border-radius: 28px; padding: 36px 24px; max-width: 440px; width: 100%; text-align: center; box-shadow: 0 30px 90px rgba(0,0,0,0.9); }
-    h1 { font-size: 24px; font-weight: 800; margin: 8px 0; color: #fff8f2; }
-    p { font-size: 13px; color: #a6ada6; line-height: 1.6; margin: 0 0 24px; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; background: rgba(185,203,186,0.15); color: #b9cbba; font-size: 11px; font-weight: 700; margin-bottom: 12px; }
-    .step { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 18px; margin-bottom: 14px; text-align: left; }
-    .step-title { font-size: 13px; font-weight: 700; color: #fff8f2; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-    .step-num { width: 22px; height: 22px; border-radius: 50%; background: #b9cbba; color: #0d0f0d; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
-    .step-desc { font-size: 11px; color: #a6ada6; line-height: 1.5; margin-bottom: 12px; }
-    .btn { display: block; width: 100%; box-sizing: border-box; padding: 12px 18px; border-radius: 9999px; font-size: 13px; font-weight: 700; text-align: center; text-decoration: none; transition: transform 0.2s, background 0.2s; }
+    .card { background: #121613; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 32px 24px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.8); }
+    .icon { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 16px; background: #141815; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 28px; }
+    h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; color: #fff8f2; }
+    p.subtitle { font-size: 13px; color: #a6ada6; margin: 0 0 24px; }
+    .step { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 18px; margin-bottom: 14px; text-align: left; }
+    .step-title { font-size: 14px; font-weight: 600; color: #fff8f2; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .step-num { width: 22px; height: 22px; border-radius: 50%; background: #b9cbba; color: #0d0f0d; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; shrink: 0; }
+    .step-desc { font-size: 12px; color: #a6ada6; line-height: 1.5; margin-bottom: 12px; }
+    .btn { display: block; width: 100%; box-sizing: border-box; padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 700; text-align: center; text-decoration: none; transition: transform 0.15s, background 0.15s; }
     .btn-primary { background: #b9cbba; color: #0d0f0d; }
-    .btn-primary:hover { background: #fff8f2; }
-    .btn-secondary { background: rgba(255,255,255,0.08); color: #fff8f2; border: 1px solid rgba(255,255,255,0.15); }
-    .btn-secondary:hover { background: rgba(255,255,255,0.14); }
+    .btn-primary:active { transform: scale(0.99); }
+    .btn-secondary { background: rgba(255,255,255,0.06); color: #fff8f2; border: 1px solid rgba(255,255,255,0.12); }
+    .note { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 14px; font-size: 11px; color: #a6ada6; text-align: left; line-height: 1.5; margin-top: 14px; }
+    .note strong { color: #fff8f2; }
+    .raw-link { display: inline-block; margin-top: 20px; font-size: 11px; color: rgba(166,173,166,0.6); text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge">NATIVE IOS APP (NO COMPUTER / $0 COST)</div>
-    <h1>Install Tone for iOS</h1>
-    <p>Follow these 3 quick steps in Safari to install Tone directly to your home screen with zero expiration limits.</p>
+    <div class="icon">🎵</div>
+    <h1>Install Tone</h1>
+    <p class="subtitle">Follow two quick steps to install Tone on your iPhone.</p>
 
     <div class="step">
-      <div class="step-title"><span class="step-num">1</span> Anti-Revoke DNS (Required First)</div>
-      <div class="step-desc">Blocks Apple's remote certificate blacklist servers to ensure your app never expires.<br><strong>Important:</strong> After installing the profile, toggle Airplane Mode ON for 5s then OFF to flush any cached revocation errors.</div>
-      <a href="/ios/antirevoke.mobileconfig" class="btn btn-secondary">Install Anti-Revoke Profile</a>
+      <div class="step-title"><span class="step-num">1</span> Download Profile</div>
+      <div class="step-desc">Tap below, tap <strong>Allow</strong>, then go to <strong>Settings ➔ Profile Downloaded ➔ Install</strong>.</div>
+      <a href="/ios/antirevoke.mobileconfig" class="btn btn-secondary">1. Download Profile</a>
     </div>
 
     <div class="step">
-      <div class="step-title"><span class="step-num">2</span> Install Native App</div>
-      <div class="step-desc">Triggers Apple's Over-The-Air installer. <em>(Delete any failed Tone icon first if you had an earlier attempt)</em>. Tap 'Install' on the prompt.</div>
-      <a href="${itmsUrl}" class="btn btn-primary">Install Tone iOS</a>
+      <div class="step-title"><span class="step-num">2</span> Install App</div>
+      <div class="step-desc">Tap below, then tap <strong>Install</strong>. Tone will start downloading to your home screen.</div>
+      <a href="${itmsUrl}" class="btn btn-primary">2. Install Tone</a>
     </div>
 
-    <div class="step">
-      <div class="step-title"><span class="step-num">3</span> Trust Developer Certificate</div>
-      <div class="step-desc">Open Settings &gt; General &gt; VPN &amp; Device Management &gt; Tap 'GLOBAL TAKEOFF, INC' &gt; Tap 'Trust'.</div>
+    <div class="note">
+      <strong>Before opening Tone:</strong><br>
+      Go to Settings ➔ General ➔ VPN &amp; Device Management, tap <strong>Beihang University</strong>, and tap <strong>Trust</strong>.
     </div>
+
+    <a href="/ios/Tone-Enterprise.ipa" class="raw-link">Download .ipa file directly</a>
   </div>
 </body>
 </html>`);
