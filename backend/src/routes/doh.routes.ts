@@ -4,6 +4,14 @@ import fetch from 'node-fetch';
 const router = Router();
 
 const BLOCKED_DOMAINS = [
+  // 1. Provisioning Profile Query (PPQ) - Critical 75% OTA check
+  'ppq.apple.com',
+  'ppq-ext.v.aaplimg.com',
+  'usw2-ppq-ext-prod.apple.com',
+  'use1-ppq-ext-prod.apple.com',
+  'ppq-st-ext.itunes.apple.com',
+
+  // 2. Online Certificate Status Protocol (OCSP)
   'ocsp.apple.com',
   'ocsp2.apple.com',
   'ocsp3.apple.com',
@@ -11,6 +19,8 @@ const BLOCKED_DOMAINS = [
   'ocsp-a.g.aaplimg.com',
   'ocsp2.g.aaplimg.com',
   'ocsp2.apple.com.edgesuite.net',
+
+  // 3. Certificate Revocation Lists & Trust Anchors
   'valid.apple.com',
   'valid-apple.g.aaplimg.com',
   'crl.apple.com',
@@ -28,6 +38,7 @@ const BLOCKED_DOMAINS = [
 ];
 
 function isBlocked(domain: string): boolean {
+  if (!domain) return false;
   const clean = domain.toLowerCase().trim();
   return BLOCKED_DOMAINS.some(b => clean === b || clean.endsWith(`.${b}`));
 }
@@ -37,6 +48,7 @@ function parseDomain(buffer: Buffer, offset = 12): { domain: string; endOffset: 
   let curr = offset;
   while (curr < buffer.length && buffer[curr] !== 0) {
     const len = buffer[curr++];
+    if (len === 0) break;
     if (curr + len > buffer.length) break;
     domainParts.push(buffer.subarray(curr, curr + len).toString('utf8'));
     curr += len;
@@ -54,7 +66,7 @@ function createBlockedResponse(queryBuf: Buffer): Buffer | null {
 
   const header = Buffer.alloc(12);
   header.writeUInt16BE(id, 0);
-  header.writeUInt16BE(0x8180, 2); // Standard response, No error
+  header.writeUInt16BE(0x8180, 2); // Standard response, No error, Recursion Desired & Available
   header.writeUInt16BE(1, 4);      // QDCOUNT: 1
   header.writeUInt16BE(0, 8);      // NSCOUNT: 0
   header.writeUInt16BE(0, 10);     // ARCOUNT: 0
@@ -65,10 +77,10 @@ function createBlockedResponse(queryBuf: Buffer): Buffer | null {
     // Type A: IPv4 0.0.0.0
     header.writeUInt16BE(1, 6); // ANCOUNT: 1
     const answer = Buffer.alloc(16);
-    answer.writeUInt16BE(0xc00c, 0);
+    answer.writeUInt16BE(0xc00c, 0); // Pointer to question name
     answer.writeUInt16BE(1, 2);      // Type A
     answer.writeUInt16BE(1, 4);      // Class IN
-    answer.writeUInt32BE(300, 6);    // TTL
+    answer.writeUInt32BE(300, 6);    // TTL 300s
     answer.writeUInt16BE(4, 10);     // Length 4
     answer.writeUInt32BE(0, 12);     // 0.0.0.0
     return Buffer.concat([header, question, answer]);
@@ -76,10 +88,10 @@ function createBlockedResponse(queryBuf: Buffer): Buffer | null {
     // Type AAAA: IPv6 :: (16 zero bytes)
     header.writeUInt16BE(1, 6); // ANCOUNT: 1
     const answer = Buffer.alloc(28);
-    answer.writeUInt16BE(0xc00c, 0);
+    answer.writeUInt16BE(0xc00c, 0); // Pointer to question name
     answer.writeUInt16BE(28, 2);     // Type AAAA
     answer.writeUInt16BE(1, 4);      // Class IN
-    answer.writeUInt32BE(300, 6);    // TTL
+    answer.writeUInt32BE(300, 6);    // TTL 300s
     answer.writeUInt16BE(16, 10);    // Length 16
     answer.fill(0, 12, 28);          // 16 zero bytes
     return Buffer.concat([header, question, answer]);
@@ -95,7 +107,7 @@ async function handleDnsQuery(queryBuf: Buffer, res: Response) {
     const { domain } = parseDomain(queryBuf, 12);
 
     if (isBlocked(domain)) {
-      console.log(`[DoH] 🛡️ Strictly BLOCKED Apple OCSP/Revocation query for "${domain}" -> Returning 0.0.0.0`);
+      console.log(`[DoH] 🛡️ Strictly BLOCKED Apple verification query for "${domain}" -> Returning 0.0.0.0/::`);
       const blockedRes = createBlockedResponse(queryBuf);
       if (blockedRes) {
         res.setHeader('Content-Type', 'application/dns-message');
