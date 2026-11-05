@@ -6,6 +6,7 @@ import { notifyWorker } from './sync_worker';
 import { db } from '../db';
 import { users } from '../schema';
 import { eq } from 'drizzle-orm';
+import { logger } from '../utils/logger';
 
 let isBotInitialized = false;
 
@@ -19,6 +20,8 @@ export function initTelegramBot() {
     const command = match?.[1]?.toLowerCase();
     const rawParam = match?.[3]?.trim();
     const token = rawParam?.replace(/^link_/i, '').trim();
+
+    logger.warn('TG', `cmd /${command} from=${msg.from?.username || msg.chat.id} (tg_id: ${msg.from?.id})`);
 
     if (token) {
       // Handle account linking
@@ -36,22 +39,23 @@ export function initTelegramBot() {
               profilePhotoUrl = `/media/${largest.file_id}`;
             }
           } catch (photoErr) {
-            console.warn('[ToneBot] Failed to fetch profile photos:', photoErr);
+            logger.warn('TG', `failed to fetch profile photo for tg_id=${msg.from!.id}`);
           }
 
           await linkTelegramToUser(userId, msg.from!.id.toString(), profilePhotoUrl);
-          console.log(`[ToneBot] Linked user ${userId} to Telegram ${msg.from!.id}. Photo: ${profilePhotoUrl}`);
+          logger.success('TG', `account linked: user_id=${userId} <-> tg_id=${msg.from!.id}`);
           bot.sendMessage(
             chatId,
             "✅ Your Tone account has been linked!\n\nSend music tracks here to automatically sync them to your Tone library."
           );
           return;
         } catch (error) {
-          console.error('[ToneBot] Link account error:', error);
+          logger.error('TG', `link account error for user_id=${userId}`, error);
           bot.sendMessage(chatId, "❌ Failed to link account. Please try generating a new link code in the Tone app.");
           return;
         }
       } else {
+        logger.warn('TG', `invalid or expired token attempted by tg_id=${msg.from?.id}`);
         bot.sendMessage(chatId, "❌ Invalid or expired code. Please generate a new link code in the Profile section of the Tone app.");
         return;
       }
@@ -74,6 +78,7 @@ export function initTelegramBot() {
   });
 
   bot.onText(/\/help/, (msg) => {
+    logger.warn('TG', `cmd /help from=${msg.from?.username || msg.chat.id}`);
     bot.sendMessage(
       msg.chat.id,
       "🎵 *Tone Sync Bot*\n\nSend music audio files (MP3, FLAC, M4A, WAV, AAC) directly to this chat.\nThey will automatically sync to your Tone library on all your devices.",
@@ -83,14 +88,18 @@ export function initTelegramBot() {
 
   bot.onText(/\/status/, async (msg) => {
     if (!msg.from) return;
+    logger.warn('TG', `cmd /status from=${msg.from?.username || msg.chat.id}`);
     try {
       const [user] = await db.select().from(users).where(eq(users.telegramId, msg.from.id.toString())).limit(1);
       if (user) {
+        logger.success('TG', `status query: linked to user="${user.username}" (id: ${user.id})`);
         bot.sendMessage(msg.chat.id, `✅ Linked to Tone account: *${user.username}*`, { parse_mode: 'Markdown' });
       } else {
+        logger.warn('TG', `status query: tg_id=${msg.from.id} not linked`);
         bot.sendMessage(msg.chat.id, "❌ Not linked. Open the Tone app, navigate to Profile, and tap 'Connect Telegram Bot'.", { parse_mode: 'Markdown' });
       }
     } catch (err: any) {
+      logger.error('TG', 'status query error', err);
       bot.sendMessage(msg.chat.id, "❌ Could not retrieve status. Please try again later.");
     }
   });
@@ -102,13 +111,15 @@ export function initTelegramBot() {
 
       if (user) {
         await enqueueMusic(user.id, fileId, coverFileId, title || 'Untitled', audioPayload);
+        logger.success('TG', `track enqueued: "${title || 'Untitled'}" for user="${user.username}" (id: ${user.id})`);
         bot.sendMessage(msg.chat.id, `📥 Added "${title || 'Untitled'}" to your Tone sync queue. It will appear in your library shortly!`);
         notifyWorker();
       } else {
+        logger.warn('TG', `enqueue rejected: tg_id=${msg.from.id} not linked to any user`);
         bot.sendMessage(msg.chat.id, "❌ Your Telegram account is not linked to Tone. Please link it in the Tone app profile first.");
       }
     } catch (error) {
-      console.error('[ToneBot] Error adding music to queue:', error);
+      logger.error('TG', `error adding track "${title}" to queue`, error);
       bot.sendMessage(msg.chat.id, '❌ Something went wrong adding your track to Tone. Please try again.');
     }
   };
@@ -119,6 +130,7 @@ export function initTelegramBot() {
     const audioFileId = msg.audio.file_id;
     const coverFileId = (msg.audio as any).thumbnail?.file_id ?? (msg.audio as any).thumb?.file_id ?? null;
     const title = msg.audio.title || (msg.audio as any).file_name?.replace(/\.[^/.]+$/, "") || 'Untitled';
+    logger.warn('TG', `audio received: "${title}" from=${msg.from?.username || msg.chat.id}`);
     await processAudioMessage(msg, audioFileId, coverFileId, title, msg.audio);
   });
 
@@ -134,6 +146,7 @@ export function initTelegramBot() {
     const fileId = msg.document.file_id;
     const coverFileId = (msg.document as any).thumbnail?.file_id ?? (msg.document as any).thumb?.file_id ?? null;
     const title = msg.document.file_name?.replace(/\.[^/.]+$/, "") || 'Untitled';
+    logger.warn('TG', `audio doc received: "${title}" (${fileName}) from=${msg.from?.username || msg.chat.id}`);
     await processAudioMessage(msg, fileId, coverFileId, title, {
       ...msg.document,
       title,

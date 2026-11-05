@@ -13,6 +13,7 @@ import matchRoutes from './routes/match.routes';
 import deezerRoutes from './routes/deezer.routes';
 import dohRoutes from './routes/doh.routes';
 import { botUsername } from './config';
+import { logger } from './utils/logger';
 
 const app = express();
 
@@ -29,6 +30,16 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 }));
+
+// Compact HTTP Logger Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.http(req, res, duration);
+  });
+  next();
+});
 
 // Routes
 app.use('/', dohRoutes);
@@ -95,17 +106,20 @@ app.get(['/ios/Tone.ipa', '/download/Tone.ipa'], (_req, res) => {
   for (const ipa of ipaCandidates) {
     if (fs.existsSync(ipa)) {
       const stat = fs.statSync(ipa);
+      logger.success('OTA', `Tone.ipa served | ${(stat.size / (1024 * 1024)).toFixed(2)}MB | stream started`);
       res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Disposition', 'attachment; filename="Tone.ipa"');
       return fs.createReadStream(ipa).pipe(res);
     }
   }
+  logger.error('OTA', 'Tone.ipa not found on disk');
   res.status(404).send('Tone.ipa not found');
 });
 
 // Legacy redirect for old IPA names
 app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa', '/ios/Tone-unsigned.ipa', '/download/Tone-unsigned.ipa'], (_req, res) => {
+  logger.warn('OTA', 'legacy IPA request -> redirecting 307 to /ios/Tone.ipa');
   res.redirect(307, '/ios/Tone.ipa');
 });
 
@@ -184,6 +198,7 @@ app.get('/ios/manifest.plist', (req, res) => {
 
   res.setHeader('Content-Type', 'text/xml');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  logger.info('OTA', 'manifest delivered | Tone v1.1.1');
   res.send(manifest);
 });
 
@@ -193,6 +208,7 @@ app.get('/ios', (req, res) => {
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
   const manifestUrl = `${proto}://${host}/ios/manifest.plist`;
   const itmsUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
+  logger.info('OTA', `installer page loaded | host=${host}`);
 
   res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
@@ -258,8 +274,8 @@ for (const dir of candidatePublicDirs) {
 
 // App Download Route - redirects to iOS installer
 app.get(['/download/musicly.apk', '/download/tone.apk'], (_req, res) => {
+  logger.warn('OTA', 'APK download route -> redirecting 307 to /ios');
   return res.redirect(307, '/ios');
-});
 });
 
 app.get('/', (_req, res) => {
@@ -278,15 +294,15 @@ initTelegramBot();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Musicly Backend listening on port ${PORT}...`);
+  logger.success('SYS', `backend listening on port ${PORT} | bot="@${botUsername}"`);
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
+  logger.error('SYS', 'uncaught exception', err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+  logger.error('SYS', 'unhandled rejection', reason);
 });
 
 export default app;

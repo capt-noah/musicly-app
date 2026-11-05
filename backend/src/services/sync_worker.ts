@@ -3,6 +3,7 @@ import { saveMusic, findOrCreateArtist, findOrCreateAlbum } from './songs.servic
 import { bot } from '../config';
 import fetch from 'node-fetch';
 import { parseBuffer } from 'music-metadata';
+import { logger } from '../utils/logger';
 
 let isWorkerRunning = false;
 
@@ -12,11 +13,11 @@ let isWorkerRunning = false;
  */
 export async function notifyWorker() {
   if (isWorkerRunning) {
-    console.log('Worker is already running. New item will be picked up in current loop.');
+    logger.info('SYNC', 'worker already running | continuing queue drain');
     return;
   }
   
-  console.log('Starting Sync Worker...');
+  logger.info('SYNC', 'starting queue worker loop');
   startWorkerLoop();
 }
 
@@ -32,11 +33,11 @@ async function startWorkerLoop() {
       const batch = await getNextBatch(10);
       
       if (batch.length === 0) {
-        console.log('Queue empty. Worker shutting down...');
+        logger.info('SYNC', 'queue empty | worker standing by');
         break;
       }
       
-      console.log(`Processing batch of ${batch.length} songs...`);
+      logger.info('SYNC', `processing batch of ${batch.length} tracks`);
       
       // 2. Process the batch in parallel
       for (const item of batch) {
@@ -67,7 +68,7 @@ async function startWorkerLoop() {
               }
             }
           } catch (id3Err) {
-            console.warn(`[SyncWorker] Could not inspect ID3 tags for file ${item.fileId}:`, id3Err);
+            logger.warn('SYNC', `could not inspect ID3 tags for file=${item.fileId}`);
           }
 
           if (!artistName) artistName = 'Unknown Artist';
@@ -93,8 +94,9 @@ async function startWorkerLoop() {
           );
           
           await updateSyncStatus(item.id, 'completed');
+          logger.success('SYNC', `track synced: "${songTitle}" by "${artistName}" (user_id: ${item.userId})`);
         } catch (error) {
-          console.error(`Failed to process song ${item.id}:`, error);
+          logger.error('SYNC', `failed to process track queue_id=${item.id}`, error);
           await updateSyncStatus(item.id, 'failed');
         }
       }
@@ -103,7 +105,7 @@ async function startWorkerLoop() {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   } catch (error) {
-    console.error('Fatal Worker Error:', error);
+    logger.error('SYNC', 'fatal worker error', error);
   } finally {
     isWorkerRunning = false;
   }

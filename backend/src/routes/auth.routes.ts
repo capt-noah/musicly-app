@@ -8,6 +8,7 @@ import {
 } from '../services/auth.service';
 import { createSession, destroySession } from '../services/session.service';
 import { authenticateSession } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -38,13 +39,15 @@ router.post('/register', async (req: Request, res: Response) => {
       sameSite: 'lax',
     });
 
+    logger.success('AUTH', `register success: user="${username}" (id: ${user.id})`);
+
     return res.status(201).json({
       message: 'Registration Successful',
       sessionId,
       user,
     });
   } catch (error: any) {
-    console.error('[Auth] Registration Error:', error.message || error);
+    logger.error('AUTH', `register failed: user="${username}"`, error);
     if (error.code === '23505') {
       const field = error.detail?.includes('email') ? 'Email' : 'Username';
       return res.status(400).json({ error: `${field} already exists` });
@@ -67,6 +70,7 @@ router.post('/login', async (req: Request, res: Response) => {
   try {
     const user = await loginUser(username, password);
     if (!user) {
+      logger.error('AUTH', `login failed: user="${username}" | invalid credentials`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
@@ -79,13 +83,15 @@ router.post('/login', async (req: Request, res: Response) => {
       sameSite: 'lax',
     });
 
+    logger.success('AUTH', `login success: user="${username}" (id: ${user.id})`);
+
     return res.json({
       message: 'Login Successful',
       sessionId,
       user,
     });
   } catch (error: any) {
-    console.error('[Auth] Login Error:', error.message || error);
+    logger.error('AUTH', `login error: user="${username}"`, error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -97,9 +103,10 @@ router.post('/logout', authenticateSession as any, async (req: any, res: Respons
   try {
     await destroySession(req.sessionId);
     res.clearCookie('session_id');
+    logger.info('AUTH', `logout: user="${req.user?.username || req.sessionId}"`);
     return res.json({ message: 'Logged out successfully' });
   } catch (error: any) {
-    console.error('[Auth] Logout Error:', error.message || error);
+    logger.error('AUTH', 'logout error', error);
     return res.status(500).json({ error: 'Could not log out' });
   }
 });
