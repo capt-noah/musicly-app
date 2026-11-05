@@ -161,7 +161,7 @@ app.get('/ios/manifest.plist', (req, res) => {
                     <key>kind</key>
                     <string>software-package</string>
                     <key>url</key>
-                    <string>${baseUrl}/ios/Tone-Enterprise.ipa</string>
+                    <string>${baseUrl}/ios/Tone-Enterprise.ipa?v=1.1.0</string>
                 </dict>
                 <dict>
                     <key>kind</key>
@@ -185,7 +185,7 @@ app.get('/ios/manifest.plist', (req, res) => {
                 <key>bundle-identifier</key>
                 <string>cn.edu.buaa.wxwork.notifyext</string>
                 <key>bundle-version</key>
-                <string>1.0.0</string>
+                <string>1.1.0</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
