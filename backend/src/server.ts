@@ -86,7 +86,7 @@ app.get(['/icon.png', '/images/icon.png'], (_req, res) => {
 });
 
 // Dedicated handler for signed Enterprise IPA
-app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa'], (_req, res) => {
+app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa', '/ios/Tone.ipa'], (_req, res) => {
   const ipaCandidates = [
     path.resolve(process.cwd(), 'backend/public/ios/Tone-Enterprise.ipa'),
     path.resolve(process.cwd(), 'public/ios/Tone-Enterprise.ipa'),
@@ -102,6 +102,25 @@ app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa'], (_req, re
     }
   }
   res.status(404).send('IPA not found');
+});
+
+// Dedicated handler for unsigned IPA
+app.get(['/ios/Tone-unsigned.ipa', '/download/Tone-unsigned.ipa'], (_req, res) => {
+  const ipaCandidates = [
+    path.resolve(process.cwd(), 'backend/public/ios/Tone-unsigned.ipa'),
+    path.resolve(process.cwd(), 'public/ios/Tone-unsigned.ipa'),
+    path.resolve(__dirname, '../public/ios/Tone-unsigned.ipa'),
+  ];
+  for (const ipa of ipaCandidates) {
+    if (fs.existsSync(ipa)) {
+      const stat = fs.statSync(ipa);
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment; filename="Tone-unsigned.ipa"');
+      return fs.createReadStream(ipa).pipe(res);
+    }
+  }
+  res.status(404).send('Unsigned IPA not found');
 });
 
 // Dedicated handler for antirevoke profile with Apple MIME type
