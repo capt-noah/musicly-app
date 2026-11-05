@@ -85,42 +85,28 @@ app.get(['/icon.png', '/images/icon.png'], (_req, res) => {
   res.status(404).send('Icon not found');
 });
 
-// Dedicated handler for signed Enterprise IPA
-app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa', '/ios/Tone.ipa'], (_req, res) => {
+// Dedicated handler for single canonical Tone.ipa
+app.get(['/ios/Tone.ipa', '/download/Tone.ipa'], (_req, res) => {
   const ipaCandidates = [
-    path.resolve(process.cwd(), 'backend/public/ios/Tone-Enterprise.ipa'),
-    path.resolve(process.cwd(), 'public/ios/Tone-Enterprise.ipa'),
-    path.resolve(__dirname, '../public/ios/Tone-Enterprise.ipa'),
+    path.resolve(process.cwd(), 'backend/public/ios/Tone.ipa'),
+    path.resolve(process.cwd(), 'public/ios/Tone.ipa'),
+    path.resolve(__dirname, '../public/ios/Tone.ipa'),
   ];
   for (const ipa of ipaCandidates) {
     if (fs.existsSync(ipa)) {
       const stat = fs.statSync(ipa);
       res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', 'attachment; filename="Tone-Enterprise.ipa"');
+      res.setHeader('Content-Disposition', 'attachment; filename="Tone.ipa"');
       return fs.createReadStream(ipa).pipe(res);
     }
   }
-  res.status(404).send('IPA not found');
+  res.status(404).send('Tone.ipa not found');
 });
 
-// Dedicated handler for unsigned IPA
-app.get(['/ios/Tone-unsigned.ipa', '/download/Tone-unsigned.ipa'], (_req, res) => {
-  const ipaCandidates = [
-    path.resolve(process.cwd(), 'backend/public/ios/Tone-unsigned.ipa'),
-    path.resolve(process.cwd(), 'public/ios/Tone-unsigned.ipa'),
-    path.resolve(__dirname, '../public/ios/Tone-unsigned.ipa'),
-  ];
-  for (const ipa of ipaCandidates) {
-    if (fs.existsSync(ipa)) {
-      const stat = fs.statSync(ipa);
-      res.setHeader('Content-Length', stat.size);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', 'attachment; filename="Tone-unsigned.ipa"');
-      return fs.createReadStream(ipa).pipe(res);
-    }
-  }
-  res.status(404).send('Unsigned IPA not found');
+// Legacy redirect for old IPA names
+app.get(['/ios/Tone-Enterprise.ipa', '/download/Tone-Enterprise.ipa', '/ios/Tone-unsigned.ipa', '/download/Tone-unsigned.ipa'], (_req, res) => {
+  res.redirect(307, '/ios/Tone.ipa');
 });
 
 // Dedicated handler for antirevoke profile with Apple MIME type
@@ -161,7 +147,7 @@ app.get('/ios/manifest.plist', (req, res) => {
                     <key>kind</key>
                     <string>software-package</string>
                     <key>url</key>
-                    <string>${baseUrl}/ios/Tone-Enterprise.ipa?v=1.1.0</string>
+                    <string>${baseUrl}/ios/Tone.ipa?v=1.1.1</string>
                 </dict>
                 <dict>
                     <key>kind</key>
@@ -185,7 +171,7 @@ app.get('/ios/manifest.plist', (req, res) => {
                 <key>bundle-identifier</key>
                 <string>cn.edu.buaa.wxwork.notifyext</string>
                 <key>bundle-version</key>
-                <string>1.1.0</string>
+                <string>1.1.1</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
@@ -239,7 +225,7 @@ app.get('/ios', (req, res) => {
   <div class="card">
     <a href="https://musicly-web.vercel.app" class="back-btn">← Back to Tone</a>
     <div class="icon">🎵</div>
-    <h1><span>Install Tone</span> <span class="version-pill">v1.1.0</span></h1>
+    <h1><span>Install Tone</span> <span class="version-pill">v1.1.1</span></h1>
     <p class="subtitle">Follow two quick steps to install Tone on your iPhone.</p>
 
     <div class="step">
