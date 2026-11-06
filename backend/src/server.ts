@@ -183,7 +183,7 @@ app.get('/ios/manifest.plist', (req, res) => {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>cn.edu.buaa.wxwork.notifyext</string>
+                <string>hk.com.hsbc.enterprise.hsbchkrewards.local2</string>
                 <key>bundle-version</key>
                 <string>1.1.1</string>
                 <key>kind</key>
@@ -258,7 +258,7 @@ app.get('/ios', (req, res) => {
 
     <div class="note">
       <strong>Before opening Tone:</strong><br>
-      Go to Settings ➔ General ➔ VPN &amp; Device Management, tap <strong>Beihang University</strong>, and tap <strong>Trust</strong>.
+      Go to Settings ➔ General ➔ VPN &amp; Device Management, tap <strong>HSBC Bank plc</strong>, and tap <strong>Trust</strong>.
     </div>
   </div>
 </body>
